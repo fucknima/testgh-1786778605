@@ -1,15 +1,9 @@
 name: Test
-on:
-  push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
-    inputs:
-      base_ipa_url:
-        description: "test"
-        required: false
+on: [push]
 jobs:
   t:
     runs-on: macos-14
+    env:
+      THEOS: ${{ runner.temp }}/theos
     steps:
-      - run: echo hello
+      - run: echo $THEOS
