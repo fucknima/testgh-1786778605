@@ -1,0 +1,7 @@
+name: Test
+on: [push]
+jobs:
+  t:
+    runs-on: macos-14
+    steps:
+      - run: echo hello
