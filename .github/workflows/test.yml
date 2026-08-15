@@ -4,6 +4,6 @@ jobs:
   t:
     runs-on: macos-14
     env:
-      THEOS: ${{ runner.temp }}/theos
+      THEOS: /tmp/theos
     steps:
       - run: echo $THEOS
