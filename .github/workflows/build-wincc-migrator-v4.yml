@@ -1,0 +1,33 @@
+name: build-wincc-migrator-v4
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - wincc-sp2-sp1-full-migrator
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source
+        shell: powershell
+        run: |
+          if (Test-Path .\v4src) { Remove-Item .\v4src -Recurse -Force }
+          Expand-Archive -Path .\v4src.zip -DestinationPath .\v4src -Force
+          Get-ChildItem .\v4src
+      - name: Build Release x86
+        shell: powershell
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+          if (-not $msbuild) { throw "MSBuild not found" }
+          & $msbuild ".\v4src\WinCC全项目迁移工具.sln" /m /t:Rebuild /p:Configuration=Release /p:Platform=x86 /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinCC全项目迁移工具-第4版-Release-x86
+          path: |
+            v4src\bin\Release\WinCC全项目迁移工具.exe
+            v4src\bin\Release\WinCC全项目迁移工具.pdb
