@@ -1,0 +1,41 @@
+name: Muguet 8.8 SwiftUI hook feasibility
+on:
+  push:
+    branches: [muguet-88-swiftui-hook-research]
+  workflow_dispatch:
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: macOS SwiftUI runtime interception smoke test
+        shell: bash
+        run: |
+          set -euxo pipefail
+          clang -c -O1 MuguetCN_Interpose.c -o Interpose-mac.o
+          swiftc -swift-version 5 -emit-library -parse-as-library -module-name MuguetCN -o libMuguetCN-mac.dylib MuguetCN_SwiftUI.swift Interpose-mac.o -framework SwiftUI -framework Foundation
+          swiftc -swift-version 5 -o MuguetCN_Probe MuguetCN_Probe.swift -framework SwiftUI
+          MUGUETCN_DIAG=1 DYLD_INSERT_LIBRARIES="$PWD/libMuguetCN-mac.dylib" ./MuguetCN_Probe 2>&1 | tee probe-result.txt
+          grep -q 'MUGUETCN_PROBE: PASS' probe-result.txt
+      - name: iOS arm64 dynamic library build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot "$SDK" -c -O2 MuguetCN_Interpose.c -o Interpose-ios.o
+          xcrun --sdk iphoneos swiftc -swift-version 5 -target arm64-apple-ios15.0 -sdk "$SDK" -parse-as-library -emit-library -module-name MuguetCN MuguetCN_SwiftUI.swift Interpose-ios.o -o MuguetCN.dylib -Xlinker -install_name -Xlinker @rpath/MuguetCN.dylib
+          file MuguetCN.dylib
+          xcrun --sdk iphoneos lipo -info MuguetCN.dylib
+          codesign -f -s - MuguetCN.dylib
+          shasum -a 256 MuguetCN.dylib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MuguetCN-SwiftUI-Research
+          path: |
+            MuguetCN.dylib
+            probe-result.txt
+          if-no-files-found: error
