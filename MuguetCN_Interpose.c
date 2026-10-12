@@ -24,8 +24,47 @@ static void write_diag(const char *message) {
  if (snprintf(path,sizeof(path),"%s/Documents/MuguetCN.log",home)>=(int)sizeof(path)) return;
  FILE *f=fopen(path,"a");
  if (!f) return;
- fprintf(f,"%lld MUGUETCN_SWIFTUI_V2 %s\n",(long long)time(NULL),message);
+ fprintf(f,"%lld MUGUETCN_SWIFTUI_V3 %s\n",(long long)time(NULL),message);
  fclose(f);
+}
+
+// Logs only likely untranslated Vietnamese interface strings; no network.
+static unsigned long long seen_labels[256];
+static int logged_labels=0;
+static unsigned long long hash_label(const unsigned char *s, size_t n) {
+ unsigned long long h=1469598103934665603ULL;
+ for(size_t i=0;i<n;i++) { h^=s[i]; h*=1099511628211ULL; }
+ return h;
+}
+__attribute__((visibility("default"))) void muguet_report_untranslated_ui(const char *s) {
+ if(!s) return;
+ size_t n=strnlen(s,150);
+ if(n<3 || n>=150 || strchr(s,'\n') || strchr(s,'\r') || strchr(s,'@') || strchr(s,'/')) return;
+ static const char *prefixes[]={
+ "Cao","Rất","Bình","Trung","Thấp","Cực","Siêu","Mặc","Tối","Vừa","Chất","Hiệu",
+ "Chế","Độ","Đồ","Hình","Âm","Tăng","Giảm","Tắt","Bật","Cài","Lưu","Xóa","Khôi",
+ "Đồng","Kết","Nâng","Tùy","Lọc","Lựa","Sắc","Ánh","Tầm","Góc","Người","Xe",
+ "Nhanh","Chậm","Mượt","Tự","Thủ","Không","Đang","Hòa","Giới","Thiết","Tiết",
+ "Mật","Phản","Lệnh","Trở","Hủy","Xác","Hoàn","Số","Nhập"
+ };
+ int candidate=0;
+ for(size_t i=0;i<sizeof(prefixes)/sizeof(prefixes[0]);i++) {
+  size_t k=strlen(prefixes[i]);
+  if(n>=k && !strncmp(s,prefixes[i],k)) { candidate=1; break; }
+ }
+ if(!candidate)return;
+ unsigned long long h=hash_label((const unsigned char*)s,n);
+ size_t slot=(size_t)(h&255);
+ if(__sync_val_compare_and_swap(&seen_labels[slot],0ULL,h)!=0)return;
+ if(__sync_fetch_and_add(&logged_labels,1)>=256)return;
+ const char *home=getenv("HOME");
+ if(!home || strlen(home)>3400)return;
+ char path[4096];
+ if(snprintf(path,sizeof(path),"%s/Documents/MuguetCN-untranslated.txt",home)>=(int)sizeof(path))return;
+ FILE *fd=fopen(path,"a");
+ if(!fd)return;
+ fprintf(fd,"%s\n",s);
+ fclose(fd);
 }
 
 __attribute__((visibility("default"))) void muguet_mark_key(int changed) {

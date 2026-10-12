@@ -3,6 +3,94 @@ import SwiftUI
 
 private enum Mapping {
   static let entries: [String:String] = [
+        "Cao": "高",
+        "Rất cao": "极高",
+        "Thấp": "低",
+        "Rất thấp": "极低",
+        "Bình thường": "普通",
+        "Trung bình": "中等",
+        "Cực cao": "超高",
+        "Siêu cao": "超高",
+        "Cao nhất": "最高",
+        "Thấp nhất": "最低",
+        "Tối đa": "最大",
+        "Tối thiểu": "最小",
+        "Tắt": "关闭",
+        "Bật": "开启",
+        "Mặc định": "默认",
+        "Tùy chỉnh": "自定义",
+        "Tự động": "自动",
+        "Thủ công": "手动",
+        "Không": "否",
+        "Có": "是",
+        "Cân bằng": "均衡",
+        "Chất lượng cao": "高画质",
+        "Hiệu suất cao": "高性能",
+        "Siêu nhẹ": "超轻量",
+        "Nhẹ": "轻量",
+        "Tiêu chuẩn": "标准",
+        "Khá": "较高",
+        "Rất tốt": "非常好",
+        "Tốt": "良好",
+        "Nhanh": "快",
+        "Rất nhanh": "非常快",
+        "Chậm": "慢",
+        "Rất chậm": "非常慢",
+        "Mượt nhất": "最流畅",
+        "Tối ưu": "优化",
+        "Ổn định": "稳定",
+        "Sắc nét": "清晰",
+        "Rõ nét": "清晰",
+        "Nâng cao": "高级",
+        "Cơ bản": "基础",
+        "Đơn giản": "简单",
+        "Đầy đủ": "完整",
+        "Không giới hạn": "无限制",
+        "Giới hạn": "限制",
+        "Đang bật": "已开启",
+        "Đang tắt": "已关闭",
+        "Chất lượng": "画质",
+        "Hiệu ứng": "特效",
+        "Cấu hình": "配置",
+        "Nút": "按钮",
+        "Lưu": "保存",
+        "Xóa": "删除",
+        "Khôi phục": "恢复",
+        "Áp dụng": "应用",
+        "Xác nhận": "确认",
+        "Hủy": "取消",
+        "Đồng ý": "同意",
+        "Trở lại": "返回",
+        "Tiếp tục": "继续",
+        "Hoàn tất": "完成",
+        "Cài đặt": "设置",
+        "Tùy chọn": "选项",
+        "Chơi": "开始游戏",
+        "Bắt đầu": "开始",
+        "Dừng": "停止",
+        "Kết nối": "连接",
+        "Ngắt kết nối": "断开连接",
+        "Chế độ": "模式",
+        "Điều khiển": "控制",
+        "Khác": "其他",
+        "Mọi người": "所有人",
+        "Chỉ bạn": "仅自己",
+        "Âm thanh": "声音",
+        "Hình ảnh": "画面",
+        "Đồ họa": "画质",
+        "Độ phân giải": "分辨率",
+        "Tốc độ khung hình": "帧率",
+        "Hình ảnh sắc nét": "清晰画面",
+        "Rất cao (Tốn RAM)": "极高（占用更多内存）",
+        "Siêu mượt": "超流畅",
+        "Tăng": "增加",
+        "Giảm": "降低",
+        "Bật / Tắt": "开启 / 关闭",
+        "Không có": "无",
+        "Chế độ tối": "深色模式",
+        "Chế độ sáng": "浅色模式",
+        "Đúng": "正确",
+        "Sai": "错误",
         " người chơi trực tuyến cùng lúc.": "名玩家同时在线。",
         " người): Kết nối qua: ": "人），连接地址：",
         " player(s)": " 位玩家",
@@ -276,6 +364,20 @@ private enum Mapping {
   ]
 }
 
+// Display-only lookup; never alter cheat model category keys.
+private func translationForUI(_ text: String) -> String? {
+    if let exact = Mapping.entries[text] { return exact }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed != text { return Mapping.entries[trimmed] }
+    return nil
+}
+@_silgen_name("muguet_report_untranslated_ui")
+private func reportUntranslated(_ source: UnsafePointer<CChar>)
+private func recordUntranslated(_ source: String) {
+    guard source.utf8.count > 2 && source.utf8.count < 150 else { return }
+    source.withCString { reportUntranslated($0) }
+}
+
 @_silgen_name("muguet_mark_key")
 private func markKey(_ changed: Int32)
 
@@ -287,7 +389,8 @@ private func markText(_ changed: Int32)
 extension LocalizedStringKey {
     @_silgen_name("muguet_interpose_key")
     public init(muguetRaw source: String) {
-        let translated = Mapping.entries[source]
+        let translated = translationForUI(source)
+        if translated == nil { recordUntranslated(source) }
         markKey(translated == nil ? 0 : 1)
         self.init(stringLiteral: translated ?? source)
     }
@@ -296,7 +399,9 @@ extension LocalizedStringKey {
 extension Text {
     @_silgen_name("muguet_interpose_text")
     public init<S: StringProtocol>(muguetRaw source: S) {
-        let translated = Mapping.entries[String(source)]
+        let rawText = String(source)
+        let translated = translationForUI(rawText)
+        if translated == nil { recordUntranslated(rawText) }
         markText(translated == nil ? 0 : 1)
         if let translated { self.init(verbatim: translated) }
         else { self.init(source) }
