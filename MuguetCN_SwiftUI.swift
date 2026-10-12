@@ -276,31 +276,29 @@ private enum Mapping {
   ]
 }
 
-@_silgen_name("$s7SwiftUI18LocalizedStringKeyV13stringLiteralACSS_tcfC")
-private func originalLocalizedStringKey(_ content: String) -> LocalizedStringKey
-
-@_silgen_name("$s7SwiftUI4TextVyACxcSyRzlufC")
-private func originalDynamicText<S: StringProtocol>(_ content: S) -> Text
-
 @_silgen_name("muguet_mark_key")
 private func markKey(_ changed: Int32)
 
 @_silgen_name("muguet_mark_text")
 private func markText(_ changed: Int32)
 
-// Display-only translation: original cheat data and IDs are not modified.
-@_silgen_name("muguet_interpose_key")
-public func localizedKeyForDisplay(_ input: String) -> LocalizedStringKey {
-    let translated = Mapping.entries[input]
-    markKey(translated == nil ? 0 : 1)
-    return originalLocalizedStringKey(translated ?? input)
+// Swift initializers are METHOD-convention functions with Swift ABI ownership.
+// Hook as initializers of the exact same SwiftUI types, not as free functions.
+extension LocalizedStringKey {
+    @_silgen_name("muguet_interpose_key")
+    public init(muguetRaw source: String) {
+        let translated = Mapping.entries[source]
+        markKey(translated == nil ? 0 : 1)
+        self.init(stringLiteral: translated ?? source)
+    }
 }
 
-// Text(variable) requires a separate generic SwiftUI interception path.
-@_silgen_name("muguet_interpose_text")
-public func dynamicTextForDisplay<S: StringProtocol>(_ input: S) -> Text {
-    let translated = Mapping.entries[String(input)]
-    markText(translated == nil ? 0 : 1)
-    if let translated { return Text(verbatim: translated) }
-    return originalDynamicText(input)
+extension Text {
+    @_silgen_name("muguet_interpose_text")
+    public init<S: StringProtocol>(muguetRaw source: S) {
+        let translated = Mapping.entries[String(source)]
+        markText(translated == nil ? 0 : 1)
+        if let translated { self.init(verbatim: translated) }
+        else { self.init(source) }
+    }
 }
