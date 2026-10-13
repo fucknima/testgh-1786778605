@@ -1,0 +1,41 @@
+name: D2R iSigner Mach-O CodeSignature diagnosis
+on:
+  workflow_dispatch:
+  push:
+    branches: [d2r-ios-signing-audit]
+jobs:
+  inspect-and-sign:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download published IPA and verify SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 3 -o original.ipa \
+           'https://github.com/jiayx/d2r-mobile-build/releases/download/d2r-3.3.94012-ea86e796-game-3.3.94012-v1/D2RMobile-unsigned.ipa'
+          echo '55cd535f83b0c3d7f6ddee7938eb860fd02c5eb8827efaa312b2da665c3d5289  original.ipa' | shasum -a 256 -c -
+          python3 -c 'import zipfile;z=zipfile.ZipFile("original.ipa");z.extractall("original");print("ZIP integrity",z.testzip())'
+      - name: Run native macOS codesign on ORIGINAL files
+        shell: bash
+        run: |
+          set -u
+          APP="$PWD/original/Payload/DmIOS.app"
+          echo '=== Original framework signature load commands ==='
+          otool -l "$APP/Frameworks/Guest.framework/Guest" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
+          echo '=== Original executable signature load commands ==='
+          otool -l "$APP/DmIOS" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
+          echo '=== Try sign original Guest.framework ==='
+          codesign --force --sign - --timestamp=none --verbose=3 "$APP/Frameworks/Guest.framework"
+          echo "GUEST_SIGN_EXIT=$?"
+          echo '=== Try sign original DmIOS.app ==='
+          codesign --force --sign - --timestamp=none --verbose=3 "$APP"
+          echo "APP_SIGN_EXIT=$?"
+          echo '=== After ==='
+          codesign --verify --strict --verbose=4 "$APP/Frameworks/Guest.framework"
+          echo "GUEST_VERIFY_EXIT=$?"
+          codesign --verify --strict --verbose=4 "$APP"
+          echo "APP_VERIFY_EXIT=$?"
+          otool -l "$APP/Frameworks/Guest.framework/Guest" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
+          otool -l "$APP/DmIOS" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
