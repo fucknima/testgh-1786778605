@@ -1,0 +1,42 @@
+name: Build GTA5 Chinese dylib
+on:
+  push:
+    branches:
+      - gta5-ios-zh-dylib
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ios-arm64:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source
+        run: |
+          tar -xf assets/GTA5ZH_Project.tar.xz
+          test -s src/ZHGeneratedRules.h
+          test -s src/GTA5ZH.m
+      - name: Build iOS arm64 dynamic library
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang \
+            -arch arm64 -isysroot "$SDK" -miphoneos-version-min=17.0 \
+            -fobjc-arc -fmodules -O2 -dynamiclib -fvisibility=hidden \
+            -Wl,-install_name,@executable_path/Frameworks/GTA5ZH.dylib \
+            -framework UIKit -framework Foundation \
+            -o dist/GTA5ZH.dylib src/GTA5ZH.m
+          xcrun --sdk iphoneos strip -x dist/GTA5ZH.dylib
+          codesign --force --sign - dist/GTA5ZH.dylib
+          file dist/GTA5ZH.dylib
+          test "$(xcrun --sdk iphoneos lipo -archs dist/GTA5ZH.dylib)" = "arm64"
+          shasum -a 256 dist/GTA5ZH.dylib | tee dist/SHA256.txt
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTA5ZH-iOS-arm64-dylib
+          path: dist/
+          retention-days: 30
