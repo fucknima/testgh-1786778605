@@ -17,38 +17,36 @@ jobs:
            'https://github.com/jiayx/d2r-mobile-build/releases/download/d2r-3.3.94012-ea86e796-game-3.3.94012-v1/D2RMobile-unsigned.ipa'
           echo '55cd535f83b0c3d7f6ddee7938eb860fd02c5eb8827efaa312b2da665c3d5289  original.ipa' | shasum -a 256 -c -
           python3 -c 'import zipfile;z=zipfile.ZipFile("original.ipa");z.extractall("original");print("ZIP integrity",z.testzip())'
-      - name: Run native macOS codesign on ORIGINAL files
+      - name: Native codesign repair on nested framework and main App
         shell: bash
         run: |
-          set -u
+          set -euo pipefail
           APP="$PWD/original/Payload/DmIOS.app"
-          echo '=== Original framework signature load commands ==='
-          otool -l "$APP/Frameworks/Guest.framework/Guest" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
-          echo '=== Original executable signature load commands ==='
-          otool -l "$APP/DmIOS" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
-
-          echo '=== Confirm platform and signed paths ==='
-          codesign --verify --deep --strict --verbose=2 "$APP" || exit 14
-          echo '=== Repack as an installable-format IPA, temporary ad hoc signature only ==='
+          codesign --force --sign - --timestamp=none --verbose=3 "$APP/Frameworks/Guest.framework"
+          codesign --force --sign - --timestamp=none --verbose=3 "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --verify --strict --verbose=2 "$APP/Frameworks/Guest.framework"
+          otool -l "$APP/Frameworks/Guest.framework/Guest" | grep -A 4 'cmd LC_CODE_SIGNATURE'
+          otool -l "$APP/DmIOS" | grep -A 4 'cmd LC_CODE_SIGNATURE'
+          echo 'NATIVE_CODESIGN_VERIFY: PASS'
+      - name: Repack IPA and validate signatures in Mach-O
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 - <<'PY'
-          import zipfile,os,hashlib
+          import zipfile,os,hashlib,struct
           folder="original"
           out="D2RMobile-PreSigned-For-Resign.ipa"
           with zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6,allowZip64=True) as z:
               for root,dirs,files in os.walk(os.path.join(folder,"Payload")):
                   for fn in files:
-                      p=os.path.join(root,fn)
-                      z.write(p,os.path.relpath(p,folder))
+                      path=os.path.join(root,fn)
+                      z.write(path,os.path.relpath(path,folder))
           with zipfile.ZipFile(out) as z:
-              bad=z.testzip()
-              print("Archive integrity:",bad)
-              assert bad is None
-              main=z.read("Payload/DmIOS.app/DmIOS")
-              guest=z.read("Payload/DmIOS.app/Frameworks/Guest.framework/Guest")
-              import struct
+              assert z.testzip() is None
               def signature_info(raw):
-                  assert raw[:4] == b'\\xcf\\xfa\\xed\\xfe'
-                  ncmds,size=struct.unpack_from('<II',raw,16)
+                  assert struct.unpack_from('<I',raw)[0] == 0xfeedfacf
+                  ncmds=struct.unpack_from('<I',raw,16)[0]
                   off=32
                   for i in range(ncmds):
                       cmd,cmdsize=struct.unpack_from('<II',raw,off)
@@ -57,12 +55,12 @@ jobs:
                           assert sigoff>0 and sigsize>0 and sigoff+sigsize<=len(raw)
                           return (sigoff,sigsize)
                       off+=cmdsize
-                  raise ValueError('Missing signature load command')
-              print("Main code signature:",signature_info(main))
-              print("Guest code signature:",signature_info(guest))
-          h=hashlib.file_digest(open(out,'rb'),'sha256').hexdigest()
-          print("Resign-ready IPA:",os.path.getsize(out),"SHA256",h)
-          open("SIGNING-NOTE.txt","w").write("D2R Mobile ad hoc signed Mach-O for re-signing.\\nThis is NOT signed using your Apple certificate. Re-sign with your own iOS signing identity.\\nGitHub Action verified codesign --verify --deep --strict succeeds.\\nSHA256 "+h+"\\n")
+                  raise ValueError('Missing code signature load command')
+              for path in ['Payload/DmIOS.app/DmIOS','Payload/DmIOS.app/Frameworks/Guest.framework/Guest']:
+                  print(path,signature_info(z.read(path)))
+          with open(out,'rb') as fp:h=hashlib.file_digest(fp,'sha256').hexdigest()
+          print("SIGNING_REPAIR: PASS",os.path.getsize(out),h)
+          with open("SIGNING-NOTE.txt","w") as fp:fp.write("D2R Mobile: ad hoc Mach-O pre-signature, not an Apple device certificate. Re-sign the IPA using your own certificate and provisioning profile.\\nSHA256: "+h+"\\n")
           PY
       - uses: actions/upload-artifact@v4
         with:
@@ -72,16 +70,3 @@ jobs:
             SIGNING-NOTE.txt
           if-no-files-found: error
           retention-days: 3
-          echo '=== Try sign original Guest.framework ==='
-          codesign --force --sign - --timestamp=none --verbose=3 "$APP/Frameworks/Guest.framework"
-          echo "GUEST_SIGN_EXIT=$?"
-          echo '=== Try sign original DmIOS.app ==='
-          codesign --force --sign - --timestamp=none --verbose=3 "$APP"
-          echo "APP_SIGN_EXIT=$?"
-          echo '=== After ==='
-          codesign --verify --strict --verbose=4 "$APP/Frameworks/Guest.framework"
-          echo "GUEST_VERIFY_EXIT=$?"
-          codesign --verify --strict --verbose=4 "$APP"
-          echo "APP_VERIFY_EXIT=$?"
-          otool -l "$APP/Frameworks/Guest.framework/Guest" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
-          otool -l "$APP/DmIOS" | grep -A 4 -E 'cmd LC_CODE_SIGNATURE' || :
