@@ -16,6 +16,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          # The previous version stores its generated exact Chinese dictionary in a tar archive.
+          # Extract ONLY the dictionary; do not overwrite the updated safe-v2 hook source.
+          tar -xJOf assets/GTA5ZH_Project.tar.xz src/ZHGeneratedRules.h > src/ZHGeneratedRules.h
+          test -s src/ZHGeneratedRules.h
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" \
             -miphoneos-version-min=17.0 -fobjc-arc -fmodules -O2 -dynamiclib \
