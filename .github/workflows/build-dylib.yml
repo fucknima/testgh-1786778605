@@ -1,0 +1,42 @@
+name: Build GTA5ZH safe v2 + load probe
+on:
+  push:
+    branches: [gta5-ios-zh-safe-v2]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ios-arm64:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile safe v2 and load-only probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" \
+            -miphoneos-version-min=17.0 -fobjc-arc -fmodules -O2 -dynamiclib \
+            -fvisibility=hidden \
+            -Wl,-install_name,@executable_path/Frameworks/GTA5ZH-Safe.dylib \
+            -framework UIKit -framework Foundation \
+            -o dist/GTA5ZH-Safe.dylib src/GTA5ZH.m
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" \
+            -miphoneos-version-min=17.0 -dynamiclib -fvisibility=hidden \
+            -Wl,-install_name,@executable_path/Frameworks/GTA5ZH-Probe.dylib \
+            -o dist/GTA5ZH-Probe.dylib src/GTA5ZHProbe.c
+          for file in dist/*.dylib; do
+            test "$(xcrun --sdk iphoneos lipo -archs "$file")" = arm64
+            codesign --force --sign - "$file"
+            codesign --verify "$file"
+            xcrun --sdk iphoneos otool -L "$file"
+            shasum -a 256 "$file"
+          done
+      - name: Upload both diagnostic stages
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTA5ZH-safe-v2-and-probe
+          path: dist/*.dylib
+          retention-days: 30
