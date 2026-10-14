@@ -1,0 +1,44 @@
+name: D2R Mobile 自动签名修复
+on:
+  schedule:
+    # 每两小时检查一次；GitHub 的定时工作流可能延迟运行
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/d2r-auto-signfix.yml
+      - scripts/d2r_auto_signfix.py
+permissions:
+  contents: write
+concurrency:
+  group: d2r-auto-signfix
+  cancel-in-progress: false
+jobs:
+  check:
+    name: 检查上游最新 IPA
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      needs_repair: ${{ steps.check.outputs.needs_repair }}
+      target_tag: ${{ steps.check.outputs.target_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 获取最新 Release、SHA256，自动跳过重复版本
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/d2r_auto_signfix.py check
+  repair:
+    name: 苹果原生预签名修复和 Release
+    needs: check
+    if: needs.check.outputs.needs_repair == 'true'
+    runs-on: macos-15
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: 修复两个 IPA 并上传签名兼容版本
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_TAG: ${{ needs.check.outputs.target_tag }}
+          D2R_ALLOW_PUBLIC_REUPLOAD: ${{ vars.D2R_ALLOW_PUBLIC_REUPLOAD || 'false' }}
+        run: python3 scripts/d2r_auto_signfix.py build
