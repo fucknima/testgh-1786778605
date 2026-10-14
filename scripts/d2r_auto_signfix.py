@@ -43,9 +43,20 @@ def upstream():
     seed="\n".join(a["name"]+":"+a["digest"] for a in selected)
     target="d2r-signfix-"+tag+"-"+hashlib.sha256(seed.encode()).hexdigest()[:12]
     return rel,selected,target
+def own_release(tag):
+    repo=os.environ["GITHUB_REPOSITORY"]
+    # Draft releases are intentionally NOT available via /releases/tags/{tag}
+    # GitHub lists drafts only for authenticated repository collaborators.
+    for page in range(1,11):
+        items=ghget("/repos/"+repo+"/releases?per_page=100&page="+str(page))
+        match=next((r for r in items if r.get("tag_name")==tag),None)
+        if match:return match
+        if len(items)<100:return None
+    die("Too many releases; cannot safely decide whether release already exists")
+
 def ready(rel,assets,tag):
     repo=os.environ["GITHUB_REPOSITORY"]
-    existing=ghget("/repos/"+repo+"/releases/tags/"+tag,True)
+    existing=own_release(tag)
     expected={NAMES[a["name"]] for a in assets}|{"SIGNING-REPORT.json","SHA256SUMS.txt"}
     if existing and expected<={a["name"] for a in existing.get("assets",[]) if a["size"]>0}:
         print("Already repaired:",tag);return False
@@ -162,7 +173,7 @@ def build():
             "IPA 为 Ad Hoc 预签名包，安装前仍需使用你自己的证书在 iSigner 中重新签名。\n"
             "18 个游戏 .data 文件不在 IPA 内。请遵守原始游戏的授权和再分发限制。\n",encoding="utf-8")
         repo=os.environ["GITHUB_REPOSITORY"]
-        existing=ghget("/repos/"+repo+"/releases/tags/"+tag,True)
+        existing=own_release(tag)
         private=bool(ghget("/repos/"+repo)["private"])
         public_optin=os.getenv("D2R_ALLOW_PUBLIC_REUPLOAD","").lower()=="true"
         args=out+[str(root/"SIGNING-REPORT.json"),str(root/"SHA256SUMS.txt")]
