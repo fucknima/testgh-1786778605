@@ -17,6 +17,8 @@ static dispatch_once_t mzh_override_once;
 #if MZH_UI_EXTRAS
 static void (*mzh_original_label_text)(id, SEL, NSString *) = NULL;
 static void (*mzh_original_label_attributed)(id, SEL, NSAttributedString *) = NULL;
+static void (*mzh_original_list_text)(id, SEL, NSString *) = NULL;
+static void (*mzh_original_list_secondary)(id, SEL, NSString *) = NULL;
 static void (*mzh_original_controller_did_appear)(id, SEL, BOOL) = NULL;
 static unsigned long mzh_label_hits = 0;
 
@@ -29,6 +31,7 @@ static void MZHLabelTextHook(id label, SEL cmd, NSString *originalText) {
         NSString *translation = knownTexts[originalText];
         if (translation) {
             visibleText = translation;
+            __sync_fetch_and_add(&mzh_label_hits, 1);
         } else {
             // Only these two status prefixes can contain runtime details.
             for (NSString *prefix in @[@"Game chưa chạy: ", @"Đang kích hoạt cheat: "]) {
@@ -41,6 +44,32 @@ static void MZHLabelTextHook(id label, SEL cmd, NSString *originalText) {
         }
     }
     mzh_original_label_text(label, cmd, visibleText);
+}
+
+// UITableView/UICollectionView modern cells set text on UIListContentConfiguration.
+// Translate display properties BEFORE rendering, including text and secondaryText.
+// Exact full sentence match only; all other values go through untouched.
+static void MZHListTextHook(id configuration, SEL selector, NSString *text) {
+    if (!mzh_original_list_text) return;
+    if ([NSThread isMainThread] && [text isKindOfClass:NSString.class] && text.length < 1500) {
+        NSString *localized = MZHExtraUIMap()[text];
+        if (localized) {
+            text = localized;
+            __sync_fetch_and_add(&mzh_label_hits, 1);
+        }
+    }
+    mzh_original_list_text(configuration, selector, text);
+}
+static void MZHListSecondaryHook(id configuration, SEL selector, NSString *text) {
+    if (!mzh_original_list_secondary) return;
+    if ([NSThread isMainThread] && [text isKindOfClass:NSString.class] && text.length < 1500) {
+        NSString *localized = MZHExtraUIMap()[text];
+        if (localized) {
+            text = localized;
+            __sync_fetch_and_add(&mzh_label_hits, 1);
+        }
+    }
+    mzh_original_list_secondary(configuration, selector, text);
 }
 
 // UIKit list content configurations sometimes use attributedText, not text.
@@ -165,6 +194,19 @@ __attribute__((constructor)) static void MZHInstall(void) {
         if (attributed) {
             IMP old = method_setImplementation(attributed, (IMP)MZHLabelAttributedHook);
             mzh_original_label_attributed = (void (*)(id,SEL,NSAttributedString*))old;
+        }
+        Class listContent = NSClassFromString(@"UIListContentConfiguration");
+        if (listContent) {
+            Method primaryText = class_getInstanceMethod(listContent, @selector(setText:));
+            if (primaryText) {
+                IMP old = method_setImplementation(primaryText, (IMP)MZHListTextHook);
+                mzh_original_list_text = (void (*)(id,SEL,NSString*))old;
+            }
+            Method secondaryText = class_getInstanceMethod(listContent, @selector(setSecondaryText:));
+            if (secondaryText) {
+                IMP old = method_setImplementation(secondaryText, (IMP)MZHListSecondaryHook);
+                mzh_original_list_secondary = (void (*)(id,SEL,NSString*))old;
+            }
         }
         // Guard the lifecycle hook by exact controller type inside the callback.
         Method appeared = class_getInstanceMethod(UIViewController.class, @selector(viewDidAppear:));
