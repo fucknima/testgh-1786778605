@@ -114,7 +114,12 @@ def repair(asset,root):
     main=app/plistlib.loads((app/"Info.plist").read_bytes())["CFBundleExecutable"]
     guest=app/"Frameworks/Guest.framework/Guest"
     if not main.is_file() or not guest.is_file():die("missing main or Guest.framework")
-    files=sorted(p for p in app.rglob("*") if p.is_file() and p.read_bytes()[:4]==MAGIC)
+    def macho_file(path):
+        if not path.is_file():return False
+        try:
+            with open(path,"rb") as stream:return stream.read(4)==MAGIC
+        except OSError:return False
+    files=sorted(p for p in app.rglob("*") if macho_file(p))
     baseline={p.relative_to(app).as_posix():text_hashes(p) for p in files}
     if not baseline[main.relative_to(app).as_posix()] or not baseline[guest.relative_to(app).as_posix()]:
         die("cannot verify machine code sections")
