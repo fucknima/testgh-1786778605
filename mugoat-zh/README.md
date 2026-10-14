@@ -1,12 +1,11 @@
-# Mugoat 1.1.3 汉化 v3
+# Mugoat 1.1.3 中文补丁 v4
 
-针对用户上传的 Mugoat.ipa (PlayGTA5Native)。
-上一版额外翻译只 Hook UILabel，SwiftUI 的秘籍子菜单和 Mod 管理页面通常不经过 UILabel。
+## 实际根因（对照上传的 IPA 和截图）
+游戏二级模组界面是 UIKit 的 ModManagerViewController，不是纯 SwiftUI；上一版 v3 构建将 MZH_UI_EXTRAS 设为 0，导致 UIKit 文案拦截未编入二级菜单汉化逻辑，虽然字典中已有全部截图文本。
+v4 将其设为 1，并保留原有 SwiftUI LocalizedStringKey / Text 翻译、Localizations.json 资源覆写。针对 UILabel 的 text 和 attributedText 进行 **整条文本严格匹配** 的显示翻译；“Done” 仅在 ModManagerViewController 页面改为“完成”，不修改按钮 target/action。
 
-新版本保留原有 Localizations.json 资源替换，同时仅拦截 SwiftUI LocalizedStringKey 的 stringLiteral 初始化和 Text 的 StringProtocol 初始化，将已知显示文案精确替换成中文。没有修改秘籍代码、分类筛选、Mod 管理操作、游戏引擎、文件读写和控制逻辑。
-
-- MugoatZH-v3.dylib：SwiftUI + JSON 完整版。
-- MugoatZH-ResourceOnly-v3.dylib：只替换 JSON 的后备诊断版。
-- 不可与旧版汉化库同时注入；用干净的 Mugoat.ipa 重签名。
-- GitHub Action 的 macOS SwiftUI 冒烟测试和 iOS arm64 构建通过不等于真实设备启动测试通过。
-- 该 dylib 处理 iOS 启动器 UI，不修改 GTA V 游戏内部字幕和菜单。
+- 截图中的 5 个模组名称 + 5 段说明 + 底部提示均校验字典覆盖。
+- 不修改游戏逻辑、秘籍代码、模组操作、路径、存档、渲染。
+- 请务必从原始未注入的 Mugoat.ipa 开始，**只注入** MugoatZH-v4.dylib，重新签名。
+- 备用 MugoatZH-ResourceOnly-v4.dylib 仍仅处理 485 条 JSON 资源，供故障定位。
+- GitHub 上的编译/冒烟测试不等于真机启动验证。

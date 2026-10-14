@@ -1,7 +1,7 @@
-name: Build Mugoat 1.1.3 SwiftUI Chinese dylib
+name: Build Mugoat v4 UI Chinese dylib
 on:
   push:
-    branches: [mugoat-zh-swiftui-v3]
+    branches: [mugoat-zh-ui-complete-v4]
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,7 +15,16 @@ jobs:
         run: |
           cd mugoat-zh
           python3 generate_header.py
+          python3 build_extras.py
           python3 generate_swift_map.py
+          python3 - <<'PY'
+          import json
+          d=json.load(open("ui_extras_zh.json"))
+          names=["Độ bám đường & Drift (Handling Mod)","Tùy biến độ bám bánh xe: Mặc định, Siêu bám hoặc Drift","Tăng tốc độ xe cộ (Speed Multiplier)","Nhân đôi tốc độ tối đa của mọi phương tiện","Vô hạn đạn & Không cần nạp đạn","Bắn liên tục không bao giờ hết đạn","Không giật khi bắn (No Recoil)","Tâm súng đứng yên 100% khi sấy liên thanh","Trọng lực tùy chỉnh (Gravity Mod)","Chuyển đổi giữa trọng lực Trái đất và Mặt trăng","Các tinh chỉnh can thiệp trực tiếp vào cơ chế vật lý của game (handling xe, trọng lực, vũ khí) mà không làm crash game."]
+          assert all(name in d and d[name] for name in names)
+          assert d["Done"] == "完成"
+          print("All 11 screenshot untranslated entries exist in the runtime UIKit dictionary.")
+          PY
       - name: SwiftUI macOS runtime smoke test
         shell: bash
         run: |
@@ -32,10 +41,10 @@ jobs:
           set -euxo pipefail
           mkdir -p dist
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot "$SDK" -fobjc-arc -fmodules -O2 -DMZH_UI_EXTRAS=0 -c mugoat-zh/MugoatZH.m -o /tmp/MugoatResource.o
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot "$SDK" -fobjc-arc -fmodules -O2 -DMZH_UI_EXTRAS=1 -c mugoat-zh/MugoatZH.m -o /tmp/MugoatResource.o
           xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot "$SDK" -O2 -c mugoat-zh/MugoatZH_Interpose.c -o /tmp/MugoatInterpose.o
-          xcrun --sdk iphoneos swiftc -swift-version 5 -target arm64-apple-ios15.0 -sdk "$SDK" -parse-as-library -emit-library -module-name MugoatZH mugoat-zh/MugoatZH_SwiftUI.swift mugoat-zh/MugoatZHGenerated.swift /tmp/MugoatResource.o /tmp/MugoatInterpose.o -o dist/MugoatZH-v3.dylib -Xlinker -install_name -Xlinker '@executable_path/Frameworks/MugoatZH-v3.dylib'
-          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" -miphoneos-version-min=15.0 -dynamiclib -fobjc-arc -fmodules -O2 -DMZH_UI_EXTRAS=0 -framework Foundation -o dist/MugoatZH-ResourceOnly-v3.dylib mugoat-zh/MugoatZH.m -Wl,-install_name,@executable_path/Frameworks/MugoatZH-ResourceOnly-v3.dylib
+          xcrun --sdk iphoneos swiftc -swift-version 5 -target arm64-apple-ios15.0 -sdk "$SDK" -parse-as-library -emit-library -module-name MugoatZH mugoat-zh/MugoatZH_SwiftUI.swift mugoat-zh/MugoatZHGenerated.swift /tmp/MugoatResource.o /tmp/MugoatInterpose.o -o dist/MugoatZH-v4.dylib -Xlinker -install_name -Xlinker '@executable_path/Frameworks/MugoatZH-v4.dylib'
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" -miphoneos-version-min=15.0 -dynamiclib -fobjc-arc -fmodules -O2 -DMZH_UI_EXTRAS=0 -framework Foundation -o dist/MugoatZH-ResourceOnly-v4.dylib mugoat-zh/MugoatZH.m -Wl,-install_name,@executable_path/Frameworks/MugoatZH-ResourceOnly-v4.dylib
           for file in dist/*.dylib; do
             test "$(xcrun --sdk iphoneos lipo -archs "$file")" = arm64
             codesign --force --sign - "$file"
@@ -46,7 +55,7 @@ jobs:
           cp /tmp/MugoatZH-smoke.txt dist/Mac-SwiftUI-Test.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Mugoat-ZH-SwiftUI-v3-ios-arm64
+          name: Mugoat-ZH-v4-UIKit-SwiftUI-ios-arm64
           path: dist/*
           if-no-files-found: error
           retention-days: 30

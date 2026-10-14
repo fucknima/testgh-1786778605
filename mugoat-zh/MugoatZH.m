@@ -16,6 +16,10 @@ static dispatch_once_t mzh_override_once;
 
 #if MZH_UI_EXTRAS
 static void (*mzh_original_label_text)(id, SEL, NSString *) = NULL;
+static void (*mzh_original_label_attributed)(id, SEL, NSAttributedString *) = NULL;
+static void (*mzh_original_controller_did_appear)(id, SEL, BOOL) = NULL;
+static unsigned long mzh_label_hits = 0;
+
 // Only known, complete UI sentences. No regex, no substring replacement, no log interception.
 static void MZHLabelTextHook(id label, SEL cmd, NSString *originalText) {
     if (!mzh_original_label_text) return;
@@ -37,6 +41,40 @@ static void MZHLabelTextHook(id label, SEL cmd, NSString *originalText) {
         }
     }
     mzh_original_label_text(label, cmd, visibleText);
+}
+
+// UIKit list content configurations sometimes use attributedText, not text.
+// Only exact full strings are changed; all original attributes are preserved at index 0.
+static void MZHLabelAttributedHook(id label, SEL cmd, NSAttributedString *incoming) {
+    if (!mzh_original_label_attributed) return;
+    if ([NSThread isMainThread] && [incoming isKindOfClass:NSAttributedString.class] &&
+        incoming.length > 0 && incoming.length <= 1500) {
+        NSString *translation = MZHExtraUIMap()[incoming.string];
+        if (translation) {
+            NSDictionary *attrs = [incoming attributesAtIndex:0 effectiveRange:NULL];
+            incoming = [[NSAttributedString alloc] initWithString:translation attributes:attrs];
+            __sync_fetch_and_add(&mzh_label_hits, 1);
+        }
+    }
+    mzh_original_label_attributed(label, cmd, incoming);
+}
+
+// UIKit owns the system "Done" navigation action. Replace only its visible title,
+// after the ModManager view appears; do not change the item's target or selector.
+static void MZHModManagerDidAppear(id controller, SEL cmd, BOOL animated) {
+    if (mzh_original_controller_did_appear)
+        mzh_original_controller_did_appear(controller, cmd, animated);
+    if (![NSThread isMainThread] || ![controller isKindOfClass:UIViewController.class]) return;
+    NSString *className = NSStringFromClass([controller class]);
+    if ([className rangeOfString:@"ModManagerViewController"].location == NSNotFound) return;
+    UIBarButtonItem *item = ((UIViewController *)controller).navigationItem.rightBarButtonItem;
+    if (!item) return;
+    if ([item.title isEqualToString:@"Done"] || [item.title isEqualToString:@"Xong"]) {
+        item.title = @"完成";
+    }
+}
+__attribute__((visibility("default"))) unsigned long MugoatZH_UILabelTranslations(void) {
+    return __sync_fetch_and_add(&mzh_label_hits, 0);
 }
 #endif
 
@@ -123,7 +161,18 @@ __attribute__((constructor)) static void MZHInstall(void) {
             IMP oldLabelIMP = method_setImplementation(labelMethod, (IMP)MZHLabelTextHook);
             mzh_original_label_text = (void (*)(id,SEL,NSString*))oldLabelIMP;
         }
-        NSLog(@"[MugoatZH] localization + exact UILabel text mappings installed");
+        Method attributed = class_getInstanceMethod(UILabel.class, @selector(setAttributedText:));
+        if (attributed) {
+            IMP old = method_setImplementation(attributed, (IMP)MZHLabelAttributedHook);
+            mzh_original_label_attributed = (void (*)(id,SEL,NSAttributedString*))old;
+        }
+        // Guard the lifecycle hook by exact controller type inside the callback.
+        Method appeared = class_getInstanceMethod(UIViewController.class, @selector(viewDidAppear:));
+        if (appeared) {
+            IMP old = method_setImplementation(appeared, (IMP)MZHModManagerDidAppear);
+            mzh_original_controller_did_appear = (void (*)(id,SEL,BOOL))old;
+        }
+        NSLog(@"[MugoatZH] resource + UIKit exact text/attributedText mappings installed");
 #else
         NSLog(@"[MugoatZH] resource-only localization installed");
 #endif
