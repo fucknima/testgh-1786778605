@@ -1,0 +1,161 @@
+name: D2R v1.0.9 pre-sign for iSigner
+on:
+  push:
+    branches: [d2r-v109-signfix]
+  workflow_dispatch:
+jobs:
+  resign-ready:
+    name: Repair ${{ matrix.flavor }} 
+    runs-on: macos-15
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: standard
+            filename: D2RMobile-unsigned.ipa
+            sha256: 2b73d3787a3b4a2a916d0af81806cd1e32417d87cdf6d226cbf7ec808250eed3
+          - flavor: ios18
+            filename: D2RMobile-ios18-unsigned.ipa
+            sha256: 87c716b523f4a34d8a09cc850606859d73e1f22a0a74643f6fa0028f9c1c3f45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download original v1.0.9 and verify SHA256
+        shell: bash
+        env:
+          FILENAME: ${{ matrix.filename }}
+          EXPECTED_SHA: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/jiayx/d2r-mobile-build/releases/download/d2r-3.3.94012-dc3cc22b-game-3.3.94012-v1/$FILENAME"
+          curl -fL --retry 4 --retry-delay 3 --connect-timeout 30 -o original.ipa "$URL"
+          printf '%s  original.ipa\n' "$EXPECTED_SHA" | shasum -a 256 -c -
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile("original.ipa") as z:
+              assert z.testzip() is None
+              z.extractall("original")
+              apps=[n for n in z.namelist() if n.startswith("Payload/") and n.endswith(".app/Info.plist")]
+              assert len(apps)==1, apps
+              print("ZIP_CHECK: PASS; app",apps[0])
+          PY
+      - name: Save hashes of executable instructions before signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,struct,json
+          root="original/Payload/DmIOS.app/"
+          def sections(filename):
+              raw=open(root+filename,"rb").read()
+              assert struct.unpack_from("<I",raw,0)[0]==0xfeedfacf
+              ncmds=struct.unpack_from("<I",raw,16)[0]
+              cur=32; sections={}
+              for i in range(ncmds):
+                  cmd,size=struct.unpack_from("<II",raw,cur)
+                  if cmd==0x19:
+                      nsects=struct.unpack_from("<I",raw,cur+64)[0]
+                      for j in range(nsects):
+                          s=cur+72+j*80
+                          name=raw[s:s+16].split(b"\0")[0].decode(errors="replace")
+                          seg=raw[s+16:s+32].split(b"\0")[0].decode(errors="replace")
+                          length=struct.unpack_from("<Q",raw,s+40)[0]
+                          off=struct.unpack_from("<I",raw,s+48)[0]
+                          if seg=="__TEXT" and name=="__text":
+                              assert off+length<=len(raw)
+                              sections[seg+"/"+name]=hashlib.sha256(raw[off:off+length]).hexdigest()
+                  cur+=size
+              assert sections,filename
+              return sections
+          result={}
+          for f in ("DmIOS","Frameworks/Guest.framework/Guest"):
+              result[f]=sections(f)
+          open("code-hashes.json","w").write(json.dumps(result,indent=2))
+          print("ORIGINAL_CODE_SECTIONS:",json.dumps(result))
+          PY
+      - name: Add LC_CODE_SIGNATURE using native macOS codesign
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$PWD/original/Payload/DmIOS.app"
+          codesign --force --sign - --timestamp=none "$APP/Frameworks/Guest.framework"
+          codesign --force --sign - --timestamp=none "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --verify --strict --verbose=2 "$APP/Frameworks/Guest.framework"
+          otool -l "$APP/Frameworks/Guest.framework/Guest" | grep -A 4 'cmd LC_CODE_SIGNATURE'
+          otool -l "$APP/DmIOS" | grep -A 4 'cmd LC_CODE_SIGNATURE'
+          echo "NATIVE_CODESIGN_VERIFY: PASS"
+      - name: Validate original machine-code bytes are unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,struct,json
+          root="original/Payload/DmIOS.app/"
+          saved=json.load(open("code-hashes.json"))
+          for filename,sections in saved.items():
+              raw=open(root+filename,"rb").read()
+              ncmds=struct.unpack_from("<I",raw,16)[0]
+              cur=32; found={}
+              for i in range(ncmds):
+                  cmd,size=struct.unpack_from("<II",raw,cur)
+                  if cmd==0x19:
+                      nsects=struct.unpack_from("<I",raw,cur+64)[0]
+                      for j in range(nsects):
+                          s=cur+72+j*80
+                          name=raw[s:s+16].split(b"\0")[0].decode(errors="replace")
+                          seg=raw[s+16:s+32].split(b"\0")[0].decode(errors="replace")
+                          length=struct.unpack_from("<Q",raw,s+40)[0]
+                          off=struct.unpack_from("<I",raw,s+48)[0]
+                          if seg=="__TEXT" and name=="__text":
+                              found[seg+"/"+name]=hashlib.sha256(raw[off:off+length]).hexdigest()
+                  cur+=size
+              assert found==sections,(filename,found,sections)
+              print("MACHINE_CODE_UNCHANGED:",filename)
+          PY
+      - name: Package corrected IPA with preserved file modes
+        shell: bash
+        env:
+          FLAVOR: ${{ matrix.flavor }}
+        run: |
+          set -euo pipefail
+          OUTPUT="$GITHUB_WORKSPACE/D2RMobile-v1.0.9-$FLAVOR-SignFix.ipa"
+          (
+            cd original
+            ditto -c -k --keepParent Payload "$OUTPUT"
+          )
+          OUTPUT="$OUTPUT" python3 - <<'PY'
+          import os,zipfile,struct,hashlib
+          file=os.environ["OUTPUT"]
+          with zipfile.ZipFile(file) as z:
+              assert z.testzip() is None
+              for path in ("Payload/DmIOS.app/DmIOS","Payload/DmIOS.app/Frameworks/Guest.framework/Guest"):
+                  data=z.read(path)
+                  assert struct.unpack_from("<I",data,0)[0]==0xfeedfacf
+                  ncmds=struct.unpack_from("<I",data,16)[0]
+                  cur=32; matched=False
+                  for j in range(ncmds):
+                      cmd,size=struct.unpack_from("<II",data,cur)
+                      if cmd==0x1d:
+                          pos,length=struct.unpack_from("<II",data,cur+8)
+                          assert pos>0 and length>0 and pos+length<=len(data)
+                          print("CODE_SIGNATURE_VALID:",path,pos,length)
+                          matched=True
+                      cur+=size
+                  assert matched,path
+          with open(file,"rb") as f:sha=hashlib.file_digest(f,"sha256").hexdigest()
+          print("OUTPUT_IPA:",os.path.basename(file),os.path.getsize(file),"SHA256:",sha)
+          with open("SIGNING-NOTE.txt","w") as f:
+              f.write("D2R Mobile v1.0.9 "+os.environ["FLAVOR"]+"\n")
+              f.write("This IPA is ad hoc pre-signed (for iSigner re-signing). It is NOT signed for installation.\n")
+              f.write("Both app and Guest.framework passed macOS codesign verification; __TEXT/__text machine code unchanged.\n")
+              f.write("IPA SHA256: "+sha+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: D2RMobile-v109-${{ matrix.flavor }}-SignFix
+          path: |
+            D2RMobile-v1.0.9-${{ matrix.flavor }}-SignFix.ipa
+            SIGNING-NOTE.txt
+          if-no-files-found: error
+          retention-days: 3
