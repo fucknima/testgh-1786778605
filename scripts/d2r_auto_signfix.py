@@ -53,18 +53,14 @@ def own_release(tag):
         if len(items)<100:break
     else:die("Too many releases to check safely")
     if not matches:return None
-    matches.sort(key=lambda r:r["id"])
-    keep=matches[0]
-    def proof(r):
-        return {(a["name"],a.get("digest"),a.get("size")) for a in r.get("assets",[])}
-    for extra in matches[1:]:
-        if (keep.get("draft") and extra.get("draft") and
-            len(keep.get("assets",[]))>=3 and proof(keep)==proof(extra)):
-            print("Cleaning duplicate identical draft Release",extra["id"])
-            command("gh","api","-X","DELETE","repos/"+repo+"/releases/"+str(extra["id"]))
-        else:
-            die("Conflicting releases with same tag need manual review: "+tag)
-    return keep
+    # Multiple draft releases with the same tag can have different Ad Hoc
+    # signatures. Prefer a completed release; never delete or fail just
+    # because independently signed IPA hashes differ.
+    matches.sort(key=lambda r:(-sum(a.get("size",0)>0 for a in r.get("assets",[])),r["id"]))
+    if len(matches)>1:
+        print("WARNING: duplicate release tag; using release",matches[0]["id"],
+              "and preserving other releases for manual review:",[r["id"] for r in matches[1:]])
+    return matches[0]
 
 def ready(rel,assets,tag):
     repo=os.environ["GITHUB_REPOSITORY"]
