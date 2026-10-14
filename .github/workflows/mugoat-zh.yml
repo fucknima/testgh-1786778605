@@ -1,7 +1,7 @@
-name: Build Mugoat Chinese Resource Dylib
+name: Build Mugoat Full Chinese Dylibs
 on:
   push:
-    branches: [mugoat-zh-localization]
+    branches: [mugoat-zh-full-v2]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,19 +22,29 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          xcrun --sdk iphoneos clang \
-            -arch arm64 -isysroot "$SDK" -miphoneos-version-min=16.0 \
-            -fobjc-arc -fmodules -O2 -dynamiclib \
-            -Wl,-install_name,@executable_path/Frameworks/MugoatZH.dylib \
-            -framework Foundation -o dist/MugoatZH.dylib mugoat-zh/MugoatZH.m
-          xcrun --sdk iphoneos lipo -info dist/MugoatZH.dylib
-          xcrun --sdk iphoneos otool -L dist/MugoatZH.dylib
-          codesign --force --sign - dist/MugoatZH.dylib
-          codesign --verify dist/MugoatZH.dylib
-          shasum -a 256 dist/MugoatZH.dylib
+          for variant in Full ResourceOnly; do
+            if [ "$variant" = "Full" ]; then
+              filename="MugoatZH.dylib"
+              hooks=1
+            else
+              filename="MugoatZH-ResourceOnly.dylib"
+              hooks=0
+            fi
+            xcrun --sdk iphoneos clang \
+              -arch arm64 -isysroot "$SDK" -miphoneos-version-min=16.0 \
+              -fobjc-arc -fmodules -O2 -dynamiclib -DMZH_UI_EXTRAS="$hooks" \
+              -Wl,-install_name,@executable_path/Frameworks/"$filename" \
+              -framework Foundation -framework UIKit \
+              -o "dist/$filename" mugoat-zh/MugoatZH.m
+            test "$(xcrun --sdk iphoneos lipo -archs "dist/$filename")" = arm64
+            codesign --force --sign - "dist/$filename"
+            codesign --verify "dist/$filename"
+            xcrun --sdk iphoneos otool -L "dist/$filename"
+            shasum -a 256 "dist/$filename"
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: MugoatZH-ios-arm64-dylib
-          path: dist/MugoatZH.dylib
+          name: MugoatZH-full-v2-ios-arm64
+          path: dist/*.dylib
           retention-days: 30
 

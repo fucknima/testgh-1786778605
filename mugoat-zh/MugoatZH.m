@@ -3,12 +3,42 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <dispatch/dispatch.h>
+#if MZH_UI_EXTRAS
+#import <UIKit/UIKit.h>
+#import "GeneratedExtraUI.h"
+#endif
 #import "GeneratedTranslations.h"
 
 static NSURL *(*mzh_original_url)(id,SEL,NSString*,NSString*) = NULL;
 static NSString *(*mzh_original_path)(id,SEL,NSString*,NSString*) = NULL;
 static NSURL *mzh_override_url = nil;
 static dispatch_once_t mzh_override_once;
+
+#if MZH_UI_EXTRAS
+static void (*mzh_original_label_text)(id, SEL, NSString *) = NULL;
+// Only known, complete UI sentences. No regex, no substring replacement, no log interception.
+static void MZHLabelTextHook(id label, SEL cmd, NSString *originalText) {
+    if (!mzh_original_label_text) return;
+    NSString *visibleText = originalText;
+    if ([NSThread isMainThread] && [originalText isKindOfClass:NSString.class] && originalText.length <= 1500) {
+        NSDictionary<NSString *, NSString *> *knownTexts = MZHExtraUIMap();
+        NSString *translation = knownTexts[originalText];
+        if (translation) {
+            visibleText = translation;
+        } else {
+            // Only these two status prefixes can contain runtime details.
+            for (NSString *prefix in @[@"Game chưa chạy: ", @"Đang kích hoạt cheat: "]) {
+                if ([originalText hasPrefix:prefix]) {
+                    NSString *replacement = knownTexts[prefix];
+                    if (replacement) visibleText = [replacement stringByAppendingString:[originalText substringFromIndex:prefix.length]];
+                    break;
+                }
+            }
+        }
+    }
+    mzh_original_label_text(label, cmd, visibleText);
+}
+#endif
 
 static BOOL MZHMatch(id bundle, NSString *name, NSString *ext) {
     return bundle == NSBundle.mainBundle && [name isKindOfClass:NSString.class] &&
@@ -87,7 +117,16 @@ __attribute__((constructor)) static void MZHInstall(void) {
             IMP previous = method_setImplementation(pathMethod,(IMP)MZHPathHook);
             mzh_original_path = (NSString *(*)(id,SEL,NSString*,NSString*))previous;
         }
+#if MZH_UI_EXTRAS
+        Method labelMethod = class_getInstanceMethod(UILabel.class, @selector(setText:));
+        if (labelMethod) {
+            IMP oldLabelIMP = method_setImplementation(labelMethod, (IMP)MZHLabelTextHook);
+            mzh_original_label_text = (void (*)(id,SEL,NSString*))oldLabelIMP;
+        }
+        NSLog(@"[MugoatZH] localization + exact UILabel text mappings installed");
+#else
         NSLog(@"[MugoatZH] resource-only localization installed");
+#endif
     }
 }
 
