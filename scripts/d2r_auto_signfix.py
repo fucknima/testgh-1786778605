@@ -45,14 +45,26 @@ def upstream():
     return rel,selected,target
 def own_release(tag):
     repo=os.environ["GITHUB_REPOSITORY"]
-    # Draft releases are intentionally NOT available via /releases/tags/{tag}
-    # GitHub lists drafts only for authenticated repository collaborators.
+    # Draft releases return HTTP 404 from /releases/tags/{tag}.
+    matches=[]
     for page in range(1,11):
         items=ghget("/repos/"+repo+"/releases?per_page=100&page="+str(page))
-        match=next((r for r in items if r.get("tag_name")==tag),None)
-        if match:return match
-        if len(items)<100:return None
-    die("Too many releases; cannot safely decide whether release already exists")
+        matches.extend(r for r in items if r.get("tag_name")==tag)
+        if len(items)<100:break
+    else:die("Too many releases to check safely")
+    if not matches:return None
+    matches.sort(key=lambda r:r["id"])
+    keep=matches[0]
+    def proof(r):
+        return {(a["name"],a.get("digest"),a.get("size")) for a in r.get("assets",[])}
+    for extra in matches[1:]:
+        if (keep.get("draft") and extra.get("draft") and
+            len(keep.get("assets",[]))>=3 and proof(keep)==proof(extra)):
+            print("Cleaning duplicate identical draft Release",extra["id"])
+            command("gh","api","-X","DELETE","repos/"+repo+"/releases/"+str(extra["id"]))
+        else:
+            die("Conflicting releases with same tag need manual review: "+tag)
+    return keep
 
 def ready(rel,assets,tag):
     repo=os.environ["GITHUB_REPOSITORY"]
