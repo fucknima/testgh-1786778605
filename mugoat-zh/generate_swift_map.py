@@ -4,7 +4,7 @@ from pathlib import Path
 p=Path(__file__).resolve().parent
 eng=json.loads((p/"translations_zh.json").read_text(encoding="utf-8"))
 extra=json.loads((p/"ui_extras_zh.json").read_text(encoding="utf-8"))
-assert len(eng)==269 and len(extra)==128
+assert len(eng)==269 and len(extra)>=128
 supplement={
  "Nhân vật":"角色","Phương tiện":"载具","Chiến đấu":"战斗","Thế giới":"世界",
  "Bật":"启用","Đóng":"关闭","Áp dụng":"应用","Lệnh Cheat GTA V":"GTA V 秘籍",

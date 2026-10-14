@@ -15,7 +15,6 @@ jobs:
         run: |
           cd mugoat-zh
           python3 generate_header.py
-          python3 build_extras.py
           python3 generate_swift_map.py
           python3 - <<'PY'
           import json

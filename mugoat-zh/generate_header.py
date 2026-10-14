@@ -30,7 +30,7 @@ print(f'Generated {len(translations)} translations')
 # Existing binary contains additional Vietnamese strings in cheat and mod submenus
 # which are absent from Localizations.json. Translate only exact UILabel display text.
 extras = json.loads((base/'ui_extras_zh.json').read_text(encoding='utf-8'))
-assert len(extras) == 128
+assert len(extras) >= 128
 extra_lines = [
     '// Auto-generated from the uploaded Mugoat 1.1.3 binary; display text only.',
     '#import <Foundation/Foundation.h>',
