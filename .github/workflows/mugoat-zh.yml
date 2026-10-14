@@ -1,0 +1,40 @@
+name: Build Mugoat Chinese Resource Dylib
+on:
+  push:
+    branches: [mugoat-zh-localization]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dylib:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate translations and verify source
+        run: |
+          set -euo pipefail
+          cd mugoat-zh
+          python3 generate_header.py
+          grep -q 'MZHTranslationMap' GeneratedTranslations.h
+      - name: Build arm64 iOS dylib
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang \
+            -arch arm64 -isysroot "$SDK" -miphoneos-version-min=16.0 \
+            -fobjc-arc -fmodules -O2 -dynamiclib \
+            -Wl,-install_name,@executable_path/Frameworks/MugoatZH.dylib \
+            -framework Foundation -o dist/MugoatZH.dylib mugoat-zh/MugoatZH.m
+          xcrun --sdk iphoneos lipo -info dist/MugoatZH.dylib
+          xcrun --sdk iphoneos otool -L dist/MugoatZH.dylib
+          codesign --force --sign - dist/MugoatZH.dylib
+          codesign --verify dist/MugoatZH.dylib
+          shasum -a 256 dist/MugoatZH.dylib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MugoatZH-ios-arm64-dylib
+          path: dist/MugoatZH.dylib
+          retention-days: 30
+
