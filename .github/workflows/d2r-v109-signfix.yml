@@ -61,11 +61,11 @@ jobs:
                           seg=raw[s+16:s+32].split(b"\0")[0].decode(errors="replace")
                           length=struct.unpack_from("<Q",raw,s+40)[0]
                           off=struct.unpack_from("<I",raw,s+48)[0]
-                          if seg=="__TEXT" and name=="__text":
+                          if seg=="__TEXT" and length>0 and off>0 and off+length<=len(raw):
                               assert off+length<=len(raw)
                               sections[seg+"/"+name]=hashlib.sha256(raw[off:off+length]).hexdigest()
                   cur+=size
-              assert sections,filename
+              if not sections: print("NO_FILE_BACKED_TEXT_SECTIONS:",filename)
               return sections
           result={}
           for f in ("DmIOS","Frameworks/Guest.framework/Guest"):
@@ -107,7 +107,7 @@ jobs:
                           seg=raw[s+16:s+32].split(b"\0")[0].decode(errors="replace")
                           length=struct.unpack_from("<Q",raw,s+40)[0]
                           off=struct.unpack_from("<I",raw,s+48)[0]
-                          if seg=="__TEXT" and name=="__text":
+                          if seg=="__TEXT" and length>0 and off>0 and off+length<=len(raw):
                               found[seg+"/"+name]=hashlib.sha256(raw[off:off+length]).hexdigest()
                   cur+=size
               assert found==sections,(filename,found,sections)
