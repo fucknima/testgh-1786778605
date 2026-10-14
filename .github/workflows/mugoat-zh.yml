@@ -1,50 +1,52 @@
-name: Build Mugoat Full Chinese Dylibs
+name: Build Mugoat 1.1.3 SwiftUI Chinese dylib
 on:
   push:
-    branches: [mugoat-zh-full-v2]
+    branches: [mugoat-zh-swiftui-v3]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  dylib:
+  build:
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Generate translations and verify source
+      - name: Generate translations
         run: |
-          set -euo pipefail
           cd mugoat-zh
           python3 generate_header.py
-          grep -q 'MZHTranslationMap' GeneratedTranslations.h
-      - name: Build arm64 iOS dylib
+          python3 generate_swift_map.py
+      - name: SwiftUI macOS runtime smoke test
+        shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
+          cd mugoat-zh
+          clang -c -O1 MugoatZH_Interpose.c -o Interpose-mac.o
+          swiftc -swift-version 5 -emit-library -parse-as-library -module-name MugoatZH -o libMugoatZH-mac.dylib MugoatZH_SwiftUI.swift MugoatZHGenerated.swift Interpose-mac.o -framework SwiftUI -framework Foundation
+          swiftc -swift-version 5 -o MugoatZHProbe MugoatZHProbe.swift -framework SwiftUI
+          DYLD_INSERT_LIBRARIES="$PWD/libMugoatZH-mac.dylib" ./MugoatZHProbe | tee /tmp/MugoatZH-smoke.txt
+          grep -q MUGOAT_ZH_PROBE_PASS /tmp/MugoatZH-smoke.txt
+      - name: Build iOS arm64 variants
+        shell: bash
+        run: |
+          set -euxo pipefail
           mkdir -p dist
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          for variant in Full ResourceOnly; do
-            if [ "$variant" = "Full" ]; then
-              filename="MugoatZH.dylib"
-              hooks=1
-            else
-              filename="MugoatZH-ResourceOnly.dylib"
-              hooks=0
-            fi
-            xcrun --sdk iphoneos clang \
-              -arch arm64 -isysroot "$SDK" -miphoneos-version-min=16.0 \
-              -fobjc-arc -fmodules -O2 -dynamiclib -DMZH_UI_EXTRAS="$hooks" \
-              -Wl,-install_name,@executable_path/Frameworks/"$filename" \
-              -framework Foundation -framework UIKit \
-              -o "dist/$filename" mugoat-zh/MugoatZH.m
-            test "$(xcrun --sdk iphoneos lipo -archs "dist/$filename")" = arm64
-            codesign --force --sign - "dist/$filename"
-            codesign --verify "dist/$filename"
-            xcrun --sdk iphoneos otool -L "dist/$filename"
-            shasum -a 256 "dist/$filename"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot "$SDK" -fobjc-arc -fmodules -O2 -DMZH_UI_EXTRAS=0 -c mugoat-zh/MugoatZH.m -o /tmp/MugoatResource.o
+          xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -isysroot "$SDK" -O2 -c mugoat-zh/MugoatZH_Interpose.c -o /tmp/MugoatInterpose.o
+          xcrun --sdk iphoneos swiftc -swift-version 5 -target arm64-apple-ios15.0 -sdk "$SDK" -parse-as-library -emit-library -module-name MugoatZH mugoat-zh/MugoatZH_SwiftUI.swift mugoat-zh/MugoatZHGenerated.swift /tmp/MugoatResource.o /tmp/MugoatInterpose.o -o dist/MugoatZH-v3.dylib -Xlinker -install_name -Xlinker '@executable_path/Frameworks/MugoatZH-v3.dylib'
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" -miphoneos-version-min=15.0 -dynamiclib -fobjc-arc -fmodules -O2 -DMZH_UI_EXTRAS=0 -framework Foundation -o dist/MugoatZH-ResourceOnly-v3.dylib mugoat-zh/MugoatZH.m -Wl,-install_name,@executable_path/Frameworks/MugoatZH-ResourceOnly-v3.dylib
+          for file in dist/*.dylib; do
+            test "$(xcrun --sdk iphoneos lipo -archs "$file")" = arm64
+            codesign --force --sign - "$file"
+            codesign --verify "$file"
+            xcrun --sdk iphoneos otool -L "$file"
+            shasum -a 256 "$file"
           done
+          cp /tmp/MugoatZH-smoke.txt dist/Mac-SwiftUI-Test.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: MugoatZH-full-v2-ios-arm64
-          path: dist/*.dylib
+          name: Mugoat-ZH-SwiftUI-v3-ios-arm64
+          path: dist/*
+          if-no-files-found: error
           retention-days: 30
-
