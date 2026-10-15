@@ -1,0 +1,40 @@
+name: Publish existing D2R SignFix releases
+on:
+  push:
+    paths:
+      - .github/workflows/d2r-publish-existing.yml
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify existing draft assets and publish release versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          for id in 412309207 412313324 413481785; do
+            info="$(gh api "repos/$REPO/releases/$id")"
+            jq -e '
+              .draft == true and
+              (.tag_name | startswith("d2r-signfix-")) and
+              ( [.assets[].name] | sort ) ==
+                (["D2RMobile-ios18-SignFix.ipa","D2RMobile-standard-SignFix.ipa","SHA256SUMS.txt","SIGNING-REPORT.json"] | sort) and
+              all(.assets[]; .size > 0)
+            ' <<< "$info" >/dev/null || {
+              if jq -e '.draft == false' <<< "$info" >/dev/null; then
+                echo "Release $id already public"
+                continue
+              fi
+              echo "Release $id failed verification. Not publishing."; exit 1
+            }
+            if [[ "$id" == "413481785" ]]; then
+              gh api --method PATCH "repos/$REPO/releases/$id" -F draft=false -f make_latest=true --jq '{id, tag_name, draft, html_url}'
+            else
+              gh api --method PATCH "repos/$REPO/releases/$id" -F draft=false -f make_latest=false --jq '{id, tag_name, draft, html_url}'
+            fi
+          done
