@@ -31,7 +31,7 @@ def game_ipa_names(rel):
     # Two official formats: legacy D2RMobile-unsigned.ipa (v1.0.1-1.0.10)
     # and versioned D2RMobile-vX.Y.Z.ipa (v1.0.14 and later).
     tag=rel.get("tag_name","")
-    if re.fullmatch(r"v[0-9]+(?:\\.[0-9]+){1,3}",tag):
+    if re.fullmatch(r"v[0-9]+(?:\.[0-9]+){1,3}",tag):
         return {"D2RMobile-"+tag+".ipa":"D2RMobile-standard-SignFix.ipa",
                 "D2RMobile-"+tag+"-ios18.ipa":"D2RMobile-ios18-SignFix.ipa"}
     return {"D2RMobile-unsigned.ipa":"D2RMobile-standard-SignFix.ipa",
