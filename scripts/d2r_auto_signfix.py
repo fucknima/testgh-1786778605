@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """D2R update watcher / iSigner pre-signature repair. Public re-upload is opt-in."""
-import hashlib,json,os,plistlib,struct,subprocess,sys,tempfile,urllib.request,urllib.error,zipfile
+import hashlib,json,os,plistlib,re,struct,subprocess,sys,tempfile,urllib.request,urllib.error,zipfile
 from pathlib import Path,PurePosixPath
 
 SRC="jiayx/d2r-mobile-build"
@@ -27,19 +27,42 @@ def sha(path):
     with open(path,"rb") as stream:
         for block in iter(lambda:stream.read(4*1024*1024),b""):h.update(block)
     return h.hexdigest()
+def game_ipa_names(rel):
+    # Two official formats: legacy D2RMobile-unsigned.ipa (v1.0.1-1.0.10)
+    # and versioned D2RMobile-vX.Y.Z.ipa (v1.0.14 and later).
+    tag=rel.get("tag_name","")
+    if re.fullmatch(r"v[0-9]+(?:\\.[0-9]+){1,3}",tag):
+        return {"D2RMobile-"+tag+".ipa":"D2RMobile-standard-SignFix.ipa",
+                "D2RMobile-"+tag+"-ios18.ipa":"D2RMobile-ios18-SignFix.ipa"}
+    return {"D2RMobile-unsigned.ipa":"D2RMobile-standard-SignFix.ipa",
+            "D2RMobile-ios18-unsigned.ipa":"D2RMobile-ios18-SignFix.ipa"}
+
 def upstream():
-    rel=ghget("/repos/"+SRC+"/releases/latest")
+    # The repository also publishes data and build-tool releases, which may
+    # become its GitHub 'latest'. Select the newest full game release.
+    releases=ghget("/repos/"+SRC+"/releases?per_page=100")
+    rel=None
+    for candidate in releases:
+        if candidate.get("draft") or candidate.get("prerelease"):continue
+        present={a["name"] for a in candidate.get("assets",[])}
+        wanted=game_ipa_names(candidate)
+        if any(n in present for n,o in wanted.items() if o=="D2RMobile-standard-SignFix.ipa"):
+            rel=candidate
+            break
+    if rel is None:die("no upstream game release has a standard IPA")
+    tag=rel["tag_name"]
+    if len(tag)>110 or not all(c.isalnum() or c in ".-_" for c in tag):die("unsafe upstream release tag")
+    NAMES.clear()
+    NAMES.update(game_ipa_names(rel))
     assets={v["name"]:v for v in rel["assets"]}
-    if "D2RMobile-unsigned.ipa" not in assets:die("latest upstream release has no standard IPA")
     selected=[assets[n] for n in NAMES if n in assets]
+    if not selected or selected[0]["name"] not in assets:die("game IPA selection failed")
     for a in selected:
         if not a.get("digest","").startswith("sha256:") or len(a["digest"])!=71:
             die("upstream asset lacks SHA256: "+a["name"])
         if a.get("size",0)<1000000:die("IPA unexpectedly small: "+a["name"])
         if not a["browser_download_url"].startswith("https://github.com/"+SRC+"/releases/download/"):
             die("unexpected download origin")
-    tag=rel["tag_name"]
-    if len(tag)>110 or not all(c.isalnum() or c in ".-_" for c in tag):die("unsafe upstream release tag")
     seed="\n".join(a["name"]+":"+a["digest"] for a in selected)
     target="d2r-signfix-"+tag+"-"+hashlib.sha256(seed.encode()).hexdigest()[:12]
     return rel,selected,target
