@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <dispatch/dispatch.h>
 
 // ESign 5.0.2: compatibility shim for an existing document-open entry point.
 // A system Share Extension requires a separate .appex and cannot be added by
@@ -90,7 +91,7 @@ static BOOL legacyHook(id self, SEL cmd, UIApplication *app, NSURL *url, NSStrin
     BOOL ok = originalLegacy ? originalLegacy(self,cmd,app,staged ?: url,source,annotation) : NO;
     return (staged && !ok && copyIntoDocuments(staged)) ? YES : ok;
 }
-__attribute__((constructor)) static void installESignImportFix(void) {
+static void installESignImportFixOnMainQueue(void) {
     Class cls = objc_getClass("AppDelegate");
     if (!cls) return;
     Method method = class_getInstanceMethod(cls, @selector(application:openURL:options:));
@@ -100,4 +101,11 @@ __attribute__((constructor)) static void installESignImportFix(void) {
     method = class_getInstanceMethod(cls, @selector(application:openURL:sourceApplication:annotation:));
     if (method) originalLegacy = (LegacyImp)method_setImplementation(method, (IMP)legacyHook);
     NSLog(@"[ESignShareFix] ESign 5.0.2 import-hook installed");
+}
+
+// Defer Objective-C method replacement until after dyld and UIKit initialization.
+__attribute__((constructor)) static void scheduleESignImportFix(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        installESignImportFixOnMainQueue();
+    });
 }
