@@ -38,7 +38,7 @@ jobs:
             -o output/ESignShareFix.dylib
           file output/ESignShareFix.dylib
           xcrun otool -L output/ESignShareFix.dylib
-          xcrun otool -l output/ESignShareFix.dylib | grep -A4 LC_BUILD_VERSION | head -7
+          xcrun otool -l output/ESignShareFix.dylib | grep -A5 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_IPHONEOS' || true
 
       - name: Download IDENTICAL ESign 5.0.2 IPA and verify SHA256
         shell: bash
