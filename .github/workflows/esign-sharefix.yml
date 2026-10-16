@@ -36,6 +36,9 @@ jobs:
             -framework Foundation -framework UIKit \
             -Wl,-install_name,@executable_path/Frameworks/ESignShareFix.dylib \
             -o output/ESignShareFix.dylib
+          codesign --force --sign - --timestamp=none output/ESignShareFix.dylib
+          codesign --verify --strict --verbose=2 output/ESignShareFix.dylib
+          xcrun otool -l output/ESignShareFix.dylib | grep -A3 LC_CODE_SIGNATURE
           file output/ESignShareFix.dylib
           xcrun otool -L output/ESignShareFix.dylib
           xcrun otool -l output/ESignShareFix.dylib | grep -A5 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_IPHONEOS' || true
@@ -54,7 +57,18 @@ jobs:
         run: |
           set -euo pipefail
           python3 esign-sharefix/inject.py output/original.ipa output/ESignShareFix.dylib output/ESign_5.0.2_sharefix_UNSIGNED.ipa
+          printf 'int ESignDiagnosticNoOp(void) { return 1; }\n' > output/loader_test.c
+          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=11.0 -Os -fPIC -dynamiclib output/loader_test.c -Wl,-install_name,@executable_path/Frameworks/ESignShareFix.dylib -o output/loader_test.dylib
+          codesign --force --sign - --timestamp=none output/loader_test.dylib
+          codesign --verify --strict --verbose=2 output/loader_test.dylib
+          python3 esign-sharefix/inject.py output/original.ipa output/loader_test.dylib output/ESign_5.0.2_loader_test_UNSIGNED.ipa
           unzip -l output/ESign_5.0.2_sharefix_UNSIGNED.ipa | grep ESignShareFix.dylib
+          # Check the modified bundle can be re-signed after injection.
+          mkdir -p output/check
+          unzip -q output/ESign_5.0.2_sharefix_UNSIGNED.ipa -d output/check
+          codesign --force --deep --sign - --timestamp=none output/check/Payload/ESign.app
+          codesign --verify --deep --strict --verbose=2 output/check/Payload/ESign.app
+          rm -rf output/check
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -64,3 +78,4 @@ jobs:
           path: |
             output/ESignShareFix.dylib
             output/ESign_5.0.2_sharefix_UNSIGNED.ipa
+            output/ESign_5.0.2_loader_test_UNSIGNED.ipa
