@@ -28,6 +28,7 @@
 
 // 本地功能码策略由会员 agent 的 LocalFunctions.h 提供（DWGLocalFunctionResult）；本文件不复制其名单/策略。
 #include "LocalFunctions.h"
+#include "Preferences.h"
 
 // ---------------------------------------------------------------------------
 // 纯逻辑：类型编码严格比较 + image 路径归一化（不依赖 runtime 状态，可在测试里直接断言）
@@ -148,23 +149,64 @@ static bool DWGIsWhitelistedAdTypeKey(id adTypeKey) {
 
 // hook 1：原 false → false；原 true 且命中白名单 → false；其余原值透传。
 static bool DWGIsShowADForAdType(id self, SEL _cmd, id adTypeKey) {
+    DWGDiagnosticsIncrementHit(@"isShowADForAdType");
     const bool original = gDWGOriIsShowADForAdType(self, _cmd, adTypeKey);
-    if (!original) return false;
+    if (!original || !DWGAdsEnabled()) return original;
     return !DWGIsWhitelistedAdTypeKey(adTypeKey);
 }
 
 // hook 2：原实现照常执行（时点与读取不变），随后沿 App 原生“免打扰”分支返回 true。
 // 不改时钟 / defaults / 地区 / 会员码 / 账号，不补 completion，不写任何状态。
 static bool DWGIsExemptAdUserWithKey(id self, SEL _cmd) {
-    (void)gDWGOriIsExemptAdUserWithKey(self, _cmd);
-    return true;
+    DWGDiagnosticsIncrementHit(@"isExemptAdUserWithKey");
+    const bool original = gDWGOriIsExemptAdUserWithKey(self, _cmd);
+    return DWGAdsEnabled() ? true : original;
+}
+
+// 仅保留精确识别的公开功能码；不记录任意传入字符串或图纸、账号信息。
+static NSString *DWGDiagnosticFunctionCode(id code) {
+    if (![code isKindOfClass:[NSString class]]) return @"<非字符串>";
+    if (DWGLocalFunctionResult(code, 0) == 1) return [code copy];
+    for (NSString *known in @[@"mcv_pdf_export_multipage", @"mcv_drawing_export_image",
+                              @"mcv_pdf_to_cad", @"mcv_service_TArch_Conversion",
+                              @"mcv_share_miniapps"]) {
+        if ([(NSString *)code isEqualToString:known]) return known;
+    }
+    return @"<未识别功能码>";
+}
+
+static void DWGRecordFunctionDecision(id code, int original, int result) {
+    NSString *safeCode = DWGDiagnosticFunctionCode(code);
+    @synchronized (DWGDiagnosticsStore()) {
+        NSMutableDictionary *entry = DWGDiagnosticsEntry(@"isKindForGongNeng");
+        entry[@"lastCode"] = safeCode;
+        entry[@"original"] = @(original);
+        entry[@"result"] = @(result);
+        // 打开设置页本身会触发其它权限读取；单独保留三个导出码，避免关键诊断被覆盖。
+        if ([safeCode isEqualToString:@"mcv_drawing_export_pdf"] ||
+            [safeCode isEqualToString:@"mcv_pdf_export_multipage"] ||
+            [safeCode isEqualToString:@"mcv_drawing_export_image"]) {
+            NSMutableDictionary *exports = [entry[@"exportDecisions"] mutableCopy];
+            if (exports == nil) {
+                exports = [NSMutableDictionary dictionary];
+            }
+            exports[safeCode] = @{@"original": @(original), @"result": @(result)};
+            entry[@"exportDecisions"] = [exports copy];
+        }
+        if (original != result) {
+            entry[@"changed"] = @([entry[@"changed"] unsignedLongLongValue] + 1ULL);
+        }
+    }
 }
 
 // hook 3：先取原值，再交给 LocalFunctions.h 提供的本地策略（策略与名单不在本文件，勿在此复制）。
 // 不默认 0→1、不伪造任何码。
 static int DWGIsKindForGongNeng(id self, SEL _cmd, id functionCode) {
+    DWGDiagnosticsIncrementHit(@"isKindForGongNeng");
     const int original = gDWGOriIsKindForGongNeng(self, _cmd, functionCode);
-    return DWGLocalFunctionResult(functionCode, original);
+    const int result = DWGLocalMemberEnabled() ? DWGLocalFunctionResult(functionCode, original) : original;
+    DWGRecordFunctionDecision(functionCode, original, result);
+    return result;
 }
 
 // ---------------------------------------------------------------------------

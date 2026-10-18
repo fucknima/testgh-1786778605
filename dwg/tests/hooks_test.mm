@@ -381,6 +381,35 @@ static void DWGTestInstalledBehavior(void) {
     gFakeFuncCalls = 0;
     (void)[delegate isKindForGongNeng:@"mcv_file_save_save"];
     DWGAssert(gFakeFuncCalls == 1);
+
+    // 开关只决定是否改值，关闭时仍调用原实现一次；仅用进程内参数域，不写用户持久偏好。
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSDictionary *saved = [defaults volatileDomainForName:NSArgumentDomain];
+    for (NSString *disabledKey in @[DWGSettingsMasterEnabledKey, DWGSettingsAdsEnabledKey,
+                                    DWGSettingsLocalMemberEnabledKey]) {
+        NSMutableDictionary *arguments = [saved mutableCopy];
+        arguments[disabledKey] = @NO;
+        [defaults setVolatileDomain:arguments forName:NSArgumentDomain];
+        const bool adsOn = [disabledKey isEqualToString:DWGSettingsLocalMemberEnabledKey];
+        const bool memberOn = [disabledKey isEqualToString:DWGSettingsAdsEnabledKey];
+        gFakeShowReturn = true; gFakeShowCalls = 0;
+        DWGAssert([toolLib isShowADForAdType:@"ad_setting_drawing"] == !adsOn);
+        DWGAssert(gFakeShowCalls == 1);
+        gFakeExemptReturn = false; gFakeExemptCalls = 0;
+        DWGAssert([toolLib isExemptAdUserWithKey] == adsOn);
+        DWGAssert(gFakeExemptCalls == 1);
+        gFakeFuncReturn = 0; gFakeFuncCalls = 0;
+        DWGAssert([delegate isKindForGongNeng:@"mcv_drawing_export_pdf"] == (memberOn ? 1 : 0));
+        DWGAssert(gFakeFuncCalls == 1);
+    }
+    [defaults setVolatileDomain:saved forName:NSArgumentDomain];
+    gFakeFuncReturn = 0;
+    DWGAssert([delegate isKindForGongNeng:@"mcv_drawing_export_pdf"] == 1);
+    (void)[delegate isKindForGongNeng:@"__unrecognized_private_string__"];
+    NSDictionary *diagnostic = DWGDiagnosticsSnapshot()[@"isKindForGongNeng"];
+    DWGAssert([diagnostic[@"lastCode"] isEqualToString:@"<未识别功能码>"]);
+    DWGAssert([diagnostic[@"changed"] unsignedLongLongValue] > 0);
+    DWGAssert([diagnostic[@"exportDecisions"][@"mcv_drawing_export_pdf"][@"result"] intValue] == 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,6 +541,12 @@ static bool DWGRunScenarioForked(const char *selfPath, const char *scenario) {
 
 int main(int argc, char **argv) {
     @autoreleasepool {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        NSMutableDictionary *arguments = [[defaults volatileDomainForName:NSArgumentDomain] mutableCopy];
+        arguments[DWGSettingsMasterEnabledKey] = @YES;
+        arguments[DWGSettingsAdsEnabledKey] = @YES;
+        arguments[DWGSettingsLocalMemberEnabledKey] = @YES;
+        [defaults setVolatileDomain:arguments forName:NSArgumentDomain];
         if (argc == 2) return DWGRunChildScenario(argv[1]);
 
         DWGTestPureFunctions();

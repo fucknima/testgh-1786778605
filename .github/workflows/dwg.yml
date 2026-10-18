@@ -23,13 +23,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check source wiring and publication order (source only)
-        run: python3 dwg/tests/source_contract_test.py
+        run: |
+          python3 dwg/tests/source_contract_test.py
+          python3 dwg/tests/settings_menu_contract_test.py
 
       # 运行产品 header 的机制测试，不是 DWG 真机/界面测试。
       - name: Test local function policy and runtime hooks
         run: |
           set -euo pipefail
-          for source in dwg/tests/local_functions_test.mm dwg/tests/hooks_test.mm; do
+          for source in dwg/tests/local_functions_test.mm dwg/tests/preferences_test.mm dwg/tests/hooks_test.mm; do
             binary="$RUNNER_TEMP/$(basename "$source" .mm)"
             clang++ -std=c++17 -fobjc-arc -fblocks -Wall -Wextra -Werror \
               -framework Foundation "$source" -o "$binary"
@@ -37,6 +39,14 @@ jobs:
           done
 
       # 不依赖 Theos/Substrate，不打包、下载或上传原 IPA。
+      - name: Compile settings against the real iOS SDK (not a UI runtime test)
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang++ -std=c++17 -fobjc-arc -fblocks -Wall -Wextra -Werror \
+            -target arm64-apple-ios15.0 -isysroot "$sdk" \
+            -fsyntax-only dwg/tests/settings_ui_compile.mm
+
       - name: Build and sign arm64 and arm64e
         run: |
           set -euo pipefail
@@ -47,7 +57,7 @@ jobs:
             xcrun --sdk iphoneos clang++ -std=c++17 -fobjc-arc -fblocks \
               -Wall -Wextra -Werror -O2 -dynamiclib \
               -target "$arch-apple-ios15.0" -isysroot "$sdk" \
-              -framework Foundation -lobjc \
+              -framework Foundation -framework UIKit -framework CoreGraphics \
               -install_name @rpath/DWGAdBlock.dylib \
               -Wl,-dead_strip dwg/Tweak.mm -o "$output"
             codesign --force --sign - "$output"
