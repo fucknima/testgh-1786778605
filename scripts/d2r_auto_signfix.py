@@ -27,7 +27,7 @@ def sha(path):
     with open(path,"rb") as stream:
         for block in iter(lambda:stream.read(4*1024*1024),b""):h.update(block)
     return h.hexdigest()
-GAME_RELEASE_RE=re.compile(r"^v(?P<version>[0-9]+(?:\\.[0-9]+){2,3})(?:-build\\.(?P<build>[0-9]+(?:\\.[0-9]+)*))?$")
+GAME_RELEASE_RE=re.compile(r"^v(?P<version>[0-9]+(?:\.[0-9]+){2,3})(?:-build\.(?P<build>[0-9]+(?:\.[0-9]+)*))?$")
 
 def game_ipa_names(rel):
     tag=rel.get("tag_name","")
@@ -74,7 +74,7 @@ def upstream():
         if a.get("size",0)<1000000:die("IPA unexpectedly small: "+a["name"])
         if not a["browser_download_url"].startswith("https://github.com/"+SRC+"/releases/download/"):
             die("unexpected download origin")
-    seed="\\n".join(a["name"]+":"+a["digest"] for a in selected)
+    seed="\n".join(a["name"]+":"+a["digest"] for a in selected)
     target="d2r-signfix-"+tag+"-"+hashlib.sha256(seed.encode()).hexdigest()[:12]
     return rel,selected,target
 
