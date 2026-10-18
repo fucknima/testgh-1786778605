@@ -177,7 +177,11 @@ static void DWGTestGuardLayers(void) {
     DWGAssert(DWGClassIsInImage([NSObject class], realImage));
     DWGAssert(!DWGClassIsInImage([NSObject class], @"/private/__dwg_no_such_image__"));
     DWGAssert(!DWGClassIsInImage(Nil, realImage));
+    // 非法 image 路径一律 false（不抛异常）：空串回归 + nil / NSNumber / NSNull 类型边界
     DWGAssert(!DWGClassIsInImage([NSObject class], [[NSString alloc] init]));
+    DWGAssert(!DWGClassIsInImage([NSObject class], nil));
+    DWGAssert(!DWGClassIsInImage([NSObject class], (id)@(7)));
+    DWGAssert(!DWGClassIsInImage([NSObject class], (id)[NSNull null]));
 
     DWGAdHookOutcome empty1 = DWGInstallAdHooksForImage(nil);
     DWGAssert(std::strcmp(empty1.isShowADForAdType.reason, "image-path-empty") == 0);

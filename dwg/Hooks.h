@@ -187,10 +187,14 @@ static Method DWGCopyOwnMethod(Class klass, SEL sel) {
     return found;
 }
 
-static bool DWGClassIsInImage(Class klass, NSString *expectedImagePath) {
-    if (klass == Nil || expectedImagePath == nil) return false;
+// 非字符串或空路径直接拒绝，避免空串调用 fileSystemRepresentation 触发 Foundation 异常。
+static bool DWGClassIsInImage(Class klass, id expectedImagePath) {
+    if (klass == Nil) return false;
+    if (![expectedImagePath isKindOfClass:[NSString class]]) return false;
+    NSString *imagePath = (NSString *)expectedImagePath;
+    if (imagePath.length == 0) return false;
     const char *actual = class_getImageName(klass);
-    return DWGPathsEqualNormalized(actual, expectedImagePath.fileSystemRepresentation);
+    return DWGPathsEqualNormalized(actual, imagePath.fileSystemRepresentation);
 }
 
 // 签名/归属全部通过才写入。Fn 为该方法的精确函数指针类型；outOriginal 直接指向调用方的 typed global，
