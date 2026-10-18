@@ -1,0 +1,48 @@
+name: Husk 3.0 简体中文 IPA
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'husk-zh/**'
+      - '.github/workflows/husk-zh.yml'
+permissions:
+  contents: write
+jobs:
+  localize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get official Husk 3.0 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-all-errors --connect-timeout 30 \
+            "https://github.com/Leviidev/Husk/releases/download/3.0/Husk.ipa" \
+            -o Husk.ipa
+          ls -lh Husk.ipa
+      - name: Patch localization and verify original Mach-O
+        run: |
+          python3 husk-zh/patch_ipa.py Husk.ipa Husk-3.0-zh.ipa
+          unzip -tqq Husk-3.0-zh.ipa
+          ls -lh Husk-3.0-zh.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Husk-3.0-zh-IPA
+          path: Husk-3.0-zh.ipa
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Publish unsigned IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=husk-3.0-zh1
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" Husk-3.0-zh.ipa --clobber
+          else
+            gh release create "$TAG" Husk-3.0-zh.ipa \
+              --title "Husk 3.0 简体中文资源版" \
+              --notes "基于 Leviidev/Husk 3.0 官方 IPA，注入静态 SwiftUI 汉化资源，不修改可执行文件；动态标题和模拟器内部界面可能仍为英文。需重新签名安装。原项目和相应源代码：https://github.com/Leviidev/Husk/tree/3.0 。汉化补丁源码见本仓库 husk-zh/。"
+          fi
