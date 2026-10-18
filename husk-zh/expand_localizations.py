@@ -91,8 +91,9 @@ def main():
     args=a.parse_args()
     found=gather(args.source)
     curated=old_table(args.existing)
+    cached=old_table(args.output) if args.output.exists() else {}
     keys=sorted(set(found)|set(curated),key=lambda s:s.casefold())
-    missing=[s for s in keys if s not in curated]
+    missing=[s for s in keys if s not in curated and s not in cached]
     print('Swift UI candidates:',len(found),'Existing translations:',len(curated),
           'To translate:',len(missing),flush=True)
     auto={}
@@ -105,9 +106,16 @@ def main():
             if i%100==0:print('Translated',i,'/',len(missing),flush=True)
     result={}
     for k in keys:
-        result[k]=curated.get(k) or auto.get(k) or k
+        v=curated.get(k) or cached.get(k) or auto.get(k) or k
+        if k not in curated:
+            v=v.replace('外壳','Husk')
+            if 'Geometry Dash' in k:
+                v=v.replace('几何破折号','Geometry Dash').replace('几何冲刺','Geometry Dash')
+            if 'Geode' in k:
+                v=v.replace('吉奥德','Geode').replace('乔德','Geode')
+        result[k]=v
     untouched=[k for k in missing if k not in auto]
-    report={'source_strings':len(found),'curated':len(curated),
+    report={'source_strings':len(found),'curated':len(curated),'cached':len(cached),
             'translated_automatically':len(auto),'untranslated':len(untouched),
             'untranslated_samples':untouched[:150],
             'note':'Resource-only build: dynamic SwiftUI Text(String) is not localized.'}
