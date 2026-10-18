@@ -1,0 +1,81 @@
+name: ESign 5.0.2 ShareFix dylib + IPA
+
+on:
+  push:
+    branches:
+      - feature/esign502-sharefix
+    paths:
+      - "esign-sharefix/**"
+      - ".github/workflows/esign-sharefix.yml"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Build iOS arm64 dylib
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          xcrun --sdk iphoneos clang \
+            -arch arm64 -miphoneos-version-min=11.0 \
+            -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -fobjc-arc -fblocks -Os -fPIC -dynamiclib \
+            esign-sharefix/ESignShareFix.m \
+            -framework Foundation -framework UIKit \
+            -Wl,-install_name,@executable_path/Frameworks/ESignShareFix.dylib \
+            -o output/ESignShareFix.dylib
+          codesign --force --sign - --timestamp=none output/ESignShareFix.dylib
+          codesign --verify --strict --verbose=2 output/ESignShareFix.dylib
+          xcrun otool -l output/ESignShareFix.dylib | grep -A3 LC_CODE_SIGNATURE
+          file output/ESignShareFix.dylib
+          xcrun otool -L output/ESignShareFix.dylib
+          xcrun otool -l output/ESignShareFix.dylib | grep -A5 -E 'LC_BUILD_VERSION|LC_VERSION_MIN_IPHONEOS' || true
+
+      - name: Download IDENTICAL ESign 5.0.2 IPA and verify SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 \
+            'https://raw.githubusercontent.com/Rxses34/Esign/main/esign_5.0.2.ipa' \
+            -o output/original.ipa
+          echo 'f00116a398972c83bc13b8c0b10d2a6ee580e404aa122bd6b4aadb4a1e479a29  output/original.ipa' | shasum -a 256 -c -
+
+      - name: Inject dylib into original IPA (unsigned)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 esign-sharefix/inject.py output/original.ipa output/ESignShareFix.dylib output/ESign_5.0.2_sharefix_UNSIGNED.ipa
+          printf 'int ESignDiagnosticNoOp(void) { return 1; }\n' > output/loader_test.c
+          xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=11.0 -Os -fPIC -dynamiclib output/loader_test.c -Wl,-install_name,@executable_path/Frameworks/ESignShareFix.dylib -o output/loader_test.dylib
+          codesign --force --sign - --timestamp=none output/loader_test.dylib
+          codesign --verify --strict --verbose=2 output/loader_test.dylib
+          python3 esign-sharefix/inject.py output/original.ipa output/loader_test.dylib output/ESign_5.0.2_loader_test_UNSIGNED.ipa
+          unzip -l output/ESign_5.0.2_sharefix_UNSIGNED.ipa | grep ESignShareFix.dylib
+          # Check the modified bundle can be re-signed after injection.
+          mkdir -p output/check
+          unzip -q output/ESign_5.0.2_sharefix_UNSIGNED.ipa -d output/check
+          codesign --force --deep --sign - --timestamp=none output/check/Payload/ESign.app
+          codesign --verify --deep --strict --verbose=2 output/check/Payload/ESign.app
+          rm -rf output/check
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ESign-5.0.2-ShareFix-arm64-UNSIGNED
+          if-no-files-found: error
+          path: |
+            output/ESignShareFix.dylib
+            output/ESign_5.0.2_sharefix_UNSIGNED.ipa
+            output/ESign_5.0.2_loader_test_UNSIGNED.ipa
