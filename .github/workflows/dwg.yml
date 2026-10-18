@@ -1,0 +1,100 @@
+name: DWG FastView dylib
+
+on:
+  pull_request:
+    paths:
+      - 'dwg/**'
+      - '.github/workflows/dwg.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'dwg/**'
+      - '.github/workflows/dwg.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check source wiring and publication order (source only)
+        run: python3 dwg/tests/source_contract_test.py
+
+      # 运行产品 header 的机制测试，不是 DWG 真机/界面测试。
+      - name: Test local function policy and runtime hooks
+        run: |
+          set -euo pipefail
+          for source in dwg/tests/local_functions_test.mm dwg/tests/hooks_test.mm; do
+            binary="$RUNNER_TEMP/$(basename "$source" .mm)"
+            clang++ -std=c++17 -fobjc-arc -fblocks -Wall -Wextra -Werror \
+              -framework Foundation "$source" -o "$binary"
+            "$binary"
+          done
+
+      # 不依赖 Theos/Substrate，不打包、下载或上传原 IPA。
+      - name: Build and sign arm64 and arm64e
+        run: |
+          set -euo pipefail
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          mkdir -p dwg/dist
+          for arch in arm64 arm64e; do
+            output="dwg/dist/DWGAdBlock-$arch.dylib"
+            xcrun --sdk iphoneos clang++ -std=c++17 -fobjc-arc -fblocks \
+              -Wall -Wextra -Werror -O2 -dynamiclib \
+              -target "$arch-apple-ios15.0" -isysroot "$sdk" \
+              -framework Foundation -lobjc \
+              -install_name @rpath/DWGAdBlock.dylib \
+              -Wl,-dead_strip dwg/Tweak.mm -o "$output"
+            codesign --force --sign - "$output"
+            codesign --verify --strict "$output"
+          done
+          xcrun lipo -create dwg/dist/DWGAdBlock-arm64.dylib \
+            dwg/dist/DWGAdBlock-arm64e.dylib -output dwg/dist/DWGAdBlock.dylib
+          codesign --force --sign - dwg/dist/DWGAdBlock.dylib
+          codesign --verify --strict dwg/dist/DWGAdBlock.dylib
+          xcrun lipo dwg/dist/DWGAdBlock.dylib -verify_arch arm64 arm64e
+          file dwg/dist/*.dylib
+          xcrun otool -L dwg/dist/DWGAdBlock.dylib
+          xcrun vtool -show-build dwg/dist/DWGAdBlock-arm64.dylib
+          xcrun vtool -show-build dwg/dist/DWGAdBlock-arm64e.dylib
+
+      - name: Record build identity
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          files = [
+              {"file": p.name, "bytes": p.stat().st_size,
+               "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+              for p in sorted(Path("dwg/dist").glob("*.dylib"))
+          ]
+          assert len(files) == 3, files
+          manifest = {
+              "commit": os.environ["SOURCE_COMMIT"],
+              "ref": os.environ["SOURCE_REF"],
+              "target": "com.gstarcad.xian.ocsclient",
+              "version": "5.21.2", "build": "5.21.2",
+              "device_tested": False, "files": files,
+          }
+          text = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+          Path("dwg/dist/manifest.json").write_text(text)
+          print(text)
+          PY
+
+      # PR/手工验证分支不上传产物；仅 main 全部成功后提供下载。
+      - name: Upload main build only
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: DWGAdBlock-5.21.2
+          path: dwg/dist/
+          if-no-files-found: error
