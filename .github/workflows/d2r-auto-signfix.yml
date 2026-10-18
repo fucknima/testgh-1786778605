@@ -23,6 +23,8 @@ jobs:
       target_tag: ${{ steps.check.outputs.target_tag }}
     steps:
       - uses: actions/checkout@v4
+      - name: 测试各种上游版本号和 IPA 文件名
+        run: python3 scripts/d2r_auto_signfix.py selftest
       - name: 获取最新 Release、SHA256，自动跳过重复版本
         id: check
         env:
