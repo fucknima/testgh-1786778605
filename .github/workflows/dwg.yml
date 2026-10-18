@@ -57,7 +57,7 @@ jobs:
             xcrun --sdk iphoneos clang++ -std=c++17 -fobjc-arc -fblocks \
               -Wall -Wextra -Werror -O2 -dynamiclib \
               -target "$arch-apple-ios15.0" -isysroot "$sdk" \
-              -framework Foundation -framework UIKit \
+              -framework Foundation -framework UIKit -framework CoreGraphics \
               -install_name @rpath/DWGAdBlock.dylib \
               -Wl,-dead_strip dwg/Tweak.mm -o "$output"
             codesign --force --sign - "$output"
