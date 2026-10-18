@@ -4,7 +4,7 @@ import hashlib, io, pathlib, plistlib, sys, zipfile
 src=pathlib.Path(sys.argv[1])
 dst=pathlib.Path(sys.argv[2])
 assert src.is_file() and src.stat().st_size > 100000000, "Missing/corrupt official Husk 3.0 IPA"
-translations=pathlib.Path(__file__).resolve().parents[1]/"husk-zh/Localizable.strings"
+translations=pathlib.Path(sys.argv[3]) if len(sys.argv)>3 else pathlib.Path(__file__).resolve().parents[1]/"husk-zh/Localizable.strings"
 t=translations.read_text(encoding="utf-8")
 assert t.count('" = "') >= 200, "Incomplete translation file"
 strings=t.encode("utf-16")
