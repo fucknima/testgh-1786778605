@@ -29,6 +29,18 @@ with zipfile.ZipFile(src) as zin:
     for loc in ("zh-Hans","en"):
         changed[app+loc+".lproj/Localizable.strings"]=strings
         changed[app+loc+".lproj/InfoPlist.strings"]=info_strings
+    extensions = [n for n in files if n.startswith(app+"PlugIns/") and n.endswith(".appex/Info.plist")]
+    for extension_path in extensions:
+        ext_root=extension_path.rsplit("/", 1)[0]+"/"
+        ext_plist_bytes=zin.read(extension_path)
+        ext_info=plistlib.loads(ext_plist_bytes)
+        ext_info["CFBundleDevelopmentRegion"]="zh-Hans"
+        ext_info["CFBundleLocalizations"]=["zh-Hans","en"]
+        ext_fmt=plistlib.FMT_BINARY if ext_plist_bytes.startswith(b"bplist") else plistlib.FMT_XML
+        changed[extension_path]=plistlib.dumps(ext_info,fmt=ext_fmt,sort_keys=False)
+        for loc in ("zh-Hans","en"):
+            changed[ext_root+loc+".lproj/Localizable.strings"]=strings
+            changed[ext_root+loc+".lproj/InfoPlist.strings"]=info_strings
     with zipfile.ZipFile(dst,"w",allowZip64=True) as zout:
         for item in zin.infolist():
             n=item.filename
