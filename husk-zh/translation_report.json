@@ -1,0 +1,8 @@
+{
+  "source_strings": 1427,
+  "curated": 251,
+  "translated_automatically": 1214,
+  "untranslated": 0,
+  "untranslated_samples": [],
+  "note": "Resource-only build: dynamic SwiftUI Text(String) is not localized."
+}
