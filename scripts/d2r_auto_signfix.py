@@ -27,29 +27,40 @@ def sha(path):
     with open(path,"rb") as stream:
         for block in iter(lambda:stream.read(4*1024*1024),b""):h.update(block)
     return h.hexdigest()
+GAME_RELEASE_RE=re.compile(r"^v(?P<version>[0-9]+(?:\\.[0-9]+){2,3})(?:-build\\.(?P<build>[0-9]+(?:\\.[0-9]+)*))?$")
+
 def game_ipa_names(rel):
-    # Two official formats: legacy D2RMobile-unsigned.ipa (v1.0.1-1.0.10)
-    # and versioned D2RMobile-vX.Y.Z.ipa (v1.0.14 and later).
     tag=rel.get("tag_name","")
-    if re.fullmatch(r"v[0-9]+(?:\.[0-9]+){1,3}",tag):
+    if GAME_RELEASE_RE.fullmatch(tag):
         return {"D2RMobile-"+tag+".ipa":"D2RMobile-standard-SignFix.ipa",
                 "D2RMobile-"+tag+"-ios18.ipa":"D2RMobile-ios18-SignFix.ipa"}
-    return {"D2RMobile-unsigned.ipa":"D2RMobile-standard-SignFix.ipa",
-            "D2RMobile-ios18-unsigned.ipa":"D2RMobile-ios18-SignFix.ipa"}
+    if tag.startswith("d2r-"):
+        return {"D2RMobile-unsigned.ipa":"D2RMobile-standard-SignFix.ipa",
+                "D2RMobile-ios18-unsigned.ipa":"D2RMobile-ios18-SignFix.ipa"}
+    return {}
+
+def release_priority(rel):
+    tag=rel["tag_name"]
+    match=GAME_RELEASE_RE.fullmatch(tag)
+    if match:
+        version=tuple(int(x) for x in match.group("version").split("."))
+        build=tuple(int(x) for x in (match.group("build") or "0").split("."))
+        return (1,version+(0,)*(4-len(version)),build,rel.get("published_at") or "")
+    return (0,(0,0,0,0),(0,),rel.get("published_at") or "")
 
 def upstream():
-    # The repository also publishes data and build-tool releases, which may
-    # become its GitHub 'latest'. Select the newest full game release.
+    # Upstream publishes game IPA releases, separate macOS ZIP releases,
+    # data packs and tool archives; release listing is not semver sorted.
     releases=ghget("/repos/"+SRC+"/releases?per_page=100")
-    rel=None
+    candidates=[]
     for candidate in releases:
         if candidate.get("draft") or candidate.get("prerelease"):continue
         present={a["name"] for a in candidate.get("assets",[])}
         wanted=game_ipa_names(candidate)
         if any(n in present for n,o in wanted.items() if o=="D2RMobile-standard-SignFix.ipa"):
-            rel=candidate
-            break
-    if rel is None:die("no upstream game release has a standard IPA")
+            candidates.append(candidate)
+    if not candidates:die("no upstream full iOS game IPA release found (check upstream naming)")
+    rel=max(candidates,key=release_priority)
     tag=rel["tag_name"]
     if len(tag)>110 or not all(c.isalnum() or c in ".-_" for c in tag):die("unsafe upstream release tag")
     NAMES.clear()
@@ -63,9 +74,25 @@ def upstream():
         if a.get("size",0)<1000000:die("IPA unexpectedly small: "+a["name"])
         if not a["browser_download_url"].startswith("https://github.com/"+SRC+"/releases/download/"):
             die("unexpected download origin")
-    seed="\n".join(a["name"]+":"+a["digest"] for a in selected)
+    seed="\\n".join(a["name"]+":"+a["digest"] for a in selected)
     target="d2r-signfix-"+tag+"-"+hashlib.sha256(seed.encode()).hexdigest()[:12]
     return rel,selected,target
+
+def selftest():
+    examples=[
+      ("v1.0.15", "D2RMobile-v1.0.15.ipa"),
+      ("v1.0.18-build.10.1", "D2RMobile-v1.0.18-build.10.1.ipa"),
+      ("v1.0.17-build.9.1", "D2RMobile-v1.0.17-build.9.1.ipa"),
+      ("d2r-3.3.94012-2e7177c0-game-3.3.94012-v1","D2RMobile-unsigned.ipa"),
+    ]
+    for tag,name in examples:
+        assert name in game_ipa_names({"tag_name":tag}),(tag,name)
+    for tag in ("v1.0.18-build.9.1-macos","tools-xlate-something","data-3.3.94012"):
+        assert not game_ipa_names({"tag_name":tag}),tag
+    assert release_priority({"tag_name":"v1.0.18-build.10.1"})>release_priority({"tag_name":"v1.0.18-build.9.1"})
+    assert release_priority({"tag_name":"v1.0.18-build.10.1"})>release_priority({"tag_name":"v1.0.17-build.9.1"})
+    print("Release naming and priority self-test: PASS")
+
 def own_release(tag):
     repo=os.environ["GITHUB_REPOSITORY"]
     # Draft releases return HTTP 404 from /releases/tags/{tag}.
@@ -219,5 +246,5 @@ def build():
             command(*call,*args)
         print("SUCCESS:",tag,"PRIVATE/DRAFT" if not private and not public_optin else "PUBLISHED")
 if __name__=="__main__":
-    if len(sys.argv)!=2 or sys.argv[1] not in ("check","build"):die("usage: check | build")
-    {"check":check,"build":build}[sys.argv[1]]()
+    if len(sys.argv)!=2 or sys.argv[1] not in ("check","build","selftest"):die("usage: check | build | selftest")
+    {"check":check,"build":build,"selftest":selftest}[sys.argv[1]]()
