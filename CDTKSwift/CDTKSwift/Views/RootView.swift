@@ -129,8 +129,8 @@ struct PairingView: View {
                                 .lineLimit(2).minimumScaleFactor(0.8)
                         }
                         if let feedback = controller.importFeedback {
-                            Label(feedback, systemImage: controller.pairingIdentity == "未导入" ? "exclamationmark.triangle" : "checkmark.circle.fill")
-                                .font(.footnote).foregroundStyle(controller.pairingIdentity == "未导入" ? .orange : .green)
+                            Label(feedback, systemImage: controller.importSucceeded ? "checkmark.circle.fill" : "exclamationmark.triangle")
+                                .font(.footnote).foregroundStyle(controller.importSucceeded ? .green : .red)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Button {

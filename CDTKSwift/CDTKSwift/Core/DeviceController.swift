@@ -19,6 +19,7 @@ final class DeviceController: ObservableObject {
     @Published var isBusy = false
     @Published var lastError: String?
     @Published var importFeedback: String?
+    @Published var importSucceeded: Bool = false
     @Published var host = "10.7.0.1"
     @Published var portText = "49152"
 
@@ -51,11 +52,13 @@ final class DeviceController: ObservableObject {
             }
             try PairingVault.shared.save(data)
             refreshPairing()
+            importSucceeded = true
             importFeedback = "已导入：\(url.lastPathComponent)"
             addLog("配对记录导入成功：\(url.lastPathComponent)。私钥仅保存于本机钥匙串。")
             lastError = nil
         } catch {
-            importFeedback = nil
+            importSucceeded = false
+            importFeedback = "导入失败：\(error.localizedDescription)"
             lastError = "导入 \(url.lastPathComponent) 失败：\(error.localizedDescription)"
             addLog("导入失败：\(error.localizedDescription)")
         }
@@ -64,6 +67,8 @@ final class DeviceController: ObservableObject {
     func removePairing() {
         PairingVault.shared.remove()
         pairingIdentity = "未导入"
+        importFeedback = nil
+        importSucceeded = false
         tunnelResult = nil
         stage = .idle
         addLog("已删除本机配对凭据。")
