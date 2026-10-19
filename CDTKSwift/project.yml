@@ -31,6 +31,28 @@ targets:
     platform: iOS
     sources:
       - path: CDTKSwift
+    info:
+      path: CDTKSwift/Info.plist
+      properties:
+        UILaunchStoryboardName: LaunchScreen
+        NSLocalNetworkUsageDescription: '用于连接本机的 CoreDevice Remote Pairing 服务。'
+        CFBundleDisplayName: 'CoreDevice 工具箱'
+        LSSupportsOpeningDocumentsInPlace: true
+        UIFileSharingEnabled: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: 'Remote Pairing / plist / JSON'
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.apple.property-list
+              - com.apple.xml-property-list
+              - com.apple.binary-property-list
+              - public.json
+              - public.data
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cdtk.swifttoolkit

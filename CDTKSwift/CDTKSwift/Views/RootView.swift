@@ -23,6 +23,14 @@ struct RootView: View {
                 .tabItem { Label("设置", systemImage: "gearshape.fill") }
         }
         .tint(Theme.blue)
+        .onOpenURL { fileURL in
+            // "Open in CoreDevice" from Files / third-party file providers.
+            guard fileURL.isFileURL else {
+                // Avoid displaying private URL query parameters to the user.
+                return
+            }
+            controller.importPairing(at: fileURL)
+        }
     }
 }
 
@@ -141,6 +149,10 @@ struct PairingView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .padding(.top, 8)
+                        Text("若当前文件提供器仍无法点选，可在「文件」中长按 pairingFile.plist → 共享 → 在其他 App 中打开 → CoreDevice 工具箱。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Panel {
                         Text("连接目标").font(.headline)
@@ -210,12 +222,12 @@ struct PairingView: View {
             }
             .background(Theme.canvas)
             .toolbar(.hidden, for: .navigationBar)
-            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
-                switch result {
-                case .success(let urls):
-                    if let url = urls.first { controller.importPairing(at: url) }
-                    else { controller.lastError = "系统文件选择器没有返回文件，请改用「存储到文件」后重新选择。" }
-                case .failure(let error): controller.lastError = error.localizedDescription
+            .sheet(isPresented: $showImporter) {
+                PairingDocumentPicker {
+                    controller.importPairing(at: $0)
+                    showImporter = false
+                } didCancel: {
+                    showImporter = false
                 }
             }
         }
