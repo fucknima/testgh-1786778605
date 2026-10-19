@@ -257,6 +257,25 @@ struct ToolsetView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     ScreenTitle(heading: "工具模块", subtitle: "真实实现与规划功能分开展示")
+                    NavigationLink {
+                        LocalArtifactToolsView()
+                    } label: {
+                        Panel {
+                            HStack(spacing: 12) {
+                                Image(systemName: "doc.text.magnifyingglass")
+                                    .font(.title3).foregroundStyle(Theme.blue)
+                                    .frame(width: 40, height: 40)
+                                    .background(Theme.canvas, in: RoundedRectangle(cornerRadius: 12))
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("IPA / 证书与配置检查").font(.headline)
+                                    Text("原生离线解析安装包、mobileconfig 和签名配置").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
                     ForEach(features) { feature in
                         Panel {
                             HStack(spacing: 12) {
