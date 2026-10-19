@@ -9,6 +9,7 @@ private enum Theme {
 }
 
 struct RootView: View {
+    @EnvironmentObject private var controller: DeviceController
     var body: some View {
         TabView {
             OverviewView()
