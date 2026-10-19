@@ -18,6 +18,7 @@ final class DeviceController: ObservableObject {
     @Published var tunnelResult: TunnelHandshake?
     @Published var isBusy = false
     @Published var lastError: String?
+    @Published var importFeedback: String?
     @Published var host = "10.7.0.1"
     @Published var portText = "49152"
 
@@ -29,15 +30,35 @@ final class DeviceController: ObservableObject {
     }
 
     func importPairing(at url: URL) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        // UIDocumentPicker can return security-scoped and iCloud provider URLs.
+        // Access must stay open throughout coordinated read; never persist a bookmark for secrets.
+        let accessible = url.startAccessingSecurityScopedResource()
+        defer { if accessible { url.stopAccessingSecurityScopedResource() } }
         do {
-            let data = try Data(contentsOf: url)
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            var coordinateError: NSError?
+            var readResult: Result<Data, Error>?
+            coordinator.coordinate(readingItemAt: url, options: [], error: &coordinateError) { actualURL in
+                readResult = Result { try Data(contentsOf: actualURL, options: .mappedIfSafe) }
+            }
+            if let error = coordinateError { throw error }
+            guard let readResult else {
+                throw CDTKError.invalidPairing("文件提供器没有交付内容。请先将文件保存至「我的 iPhone」再选择。")
+            }
+            let data = try readResult.get()
+            guard !data.isEmpty && data.count < 4_000_000 else {
+                throw CDTKError.invalidPairing("配对文件为空或超过 4 MB")
+            }
             try PairingVault.shared.save(data)
             refreshPairing()
-            addLog("配对凭据已加密保存至本机钥匙串。")
+            importFeedback = "已导入：\(url.lastPathComponent)"
+            addLog("配对记录导入成功：\(url.lastPathComponent)。私钥仅保存于本机钥匙串。")
             lastError = nil
-        } catch { lastError = error.localizedDescription }
+        } catch {
+            importFeedback = nil
+            lastError = "导入 \(url.lastPathComponent) 失败：\(error.localizedDescription)"
+            addLog("导入失败：\(error.localizedDescription)")
+        }
     }
 
     func removePairing() {

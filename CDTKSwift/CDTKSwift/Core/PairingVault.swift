@@ -7,18 +7,62 @@ struct PairingRecord {
     let publicKey: Data
 
     init(data: Data) throws {
-        guard let dict = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            throw CDTKError.invalidPairing("配对文件不是有效的 plist 字典")
+        guard let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            if let text = String(data: data, encoding: .utf8),
+               let json = text.data(using: .utf8),
+               let dictionary = try? JSONSerialization.jsonObject(with: json) as? [String: Any] {
+                try self.init(dictionary: dictionary)
+                return
+            }
+            throw CDTKError.invalidPairing("文件既不是 plist 也不是 JSON 配对记录；请确认没有导入网页或压缩包。")
         }
-        guard let identifier = dict["identifier"] as? String, !identifier.isEmpty,
-              let privateKey = dict["private_key"] as? Data, privateKey.count >= 32,
-              let publicKey = dict["public_key"] as? Data, publicKey.count >= 32 else {
-            throw CDTKError.invalidPairing("需要 identifier、private_key、public_key；请使用 Remote Pairing 格式，而不是普通 Lockdown plist")
-        }
-        self.identifier = identifier
-        self.privateKey = Data(privateKey.prefix(32))
-        self.publicKey = Data(publicKey.prefix(32))
+        try self.init(dictionary: dict)
     }
+
+    private init(dictionary dict: [String: Any]) throws {
+        // SideStore / RemotePairing records can use differing name casing and representations.
+        func bytes(_ keys: [String]) -> Data? {
+            for key in keys {
+                guard let value = dict[key] else { continue }
+                if let data = value as? Data { return data }
+                if let string = value as? String {
+                    if let decoded = Data(base64Encoded: string) { return decoded }
+                    let hex = string.replacingOccurrences(of: " ", with: "")
+                    if hex.count.isMultiple(of: 2), hex.count >= 64,
+                       hex.allSatisfy({ $0.isHexDigit }) {
+                        var out = Data()
+                        var index = hex.startIndex
+                        while index < hex.endIndex {
+                            let next = hex.index(index, offsetBy: 2)
+                            guard let b = UInt8(hex[index..<next], radix: 16) else { return nil }
+                            out.append(b)
+                            index = next
+                        }
+                        return out
+                    }
+                }
+                if let list = value as? [UInt8] { return Data(list) }
+            }
+            return nil
+        }
+        let name = (dict["host_identifier"] as? String) ??
+                   (dict["identifier"] as? String) ??
+                   (dict["HostID"] as? String) ?? ""
+        let secret = bytes(["private_key", "privateKey", "private-key"])
+        let pub = bytes(["public_key", "publicKey", "public-key"])
+        guard !name.isEmpty, let secret, secret.count >= 32,
+              let pub, pub.count >= 32 else {
+            let known = dict.keys.sorted().filter { !$0.lowercased().contains("password") }
+            if dict["HostPrivateKey"] != nil || dict["DeviceCertificate"] != nil {
+                throw CDTKError.invalidPairing("这是传统 Lockdown 信任记录，不是 RSD Remote Pairing Ed25519 配对记录。请使用可导出 Remote Pairing 的工具重新生成。")
+            }
+            throw CDTKError.invalidPairing("缺少有效的 identifier / private_key / public_key。识别到的字段：\(known.joined(separator: ", "))")
+        }
+        self.identifier = name
+        self.privateKey = Data(secret.prefix(32))
+        self.publicKey = Data(pub.prefix(32))
+    }
+
 }
 
 enum CDTKError: LocalizedError {

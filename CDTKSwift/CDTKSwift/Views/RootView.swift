@@ -128,6 +128,11 @@ struct PairingView: View {
                             Text(controller.pairingIdentity).font(.subheadline.monospaced()).textSelection(.enabled)
                                 .lineLimit(2).minimumScaleFactor(0.8)
                         }
+                        if let feedback = controller.importFeedback {
+                            Label(feedback, systemImage: controller.pairingIdentity == "未导入" ? "exclamationmark.triangle" : "checkmark.circle.fill")
+                                .font(.footnote).foregroundStyle(controller.pairingIdentity == "未导入" ? .orange : .green)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Button {
                             showImporter = true
                         } label: {
@@ -205,9 +210,11 @@ struct PairingView: View {
             }
             .background(Theme.canvas)
             .toolbar(.hidden, for: .navigationBar)
-            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
+            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
                 switch result {
-                case .success(let urls): if let url = urls.first { controller.importPairing(at: url) }
+                case .success(let urls):
+                    if let url = urls.first { controller.importPairing(at: url) }
+                    else { controller.lastError = "系统文件选择器没有返回文件，请改用「存储到文件」后重新选择。" }
                 case .failure(let error): controller.lastError = error.localizedDescription
                 }
             }
@@ -329,7 +336,7 @@ struct CrashView: View {
             }
             .background(Theme.canvas)
             .toolbar(.hidden, for: .navigationBar)
-            .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.data, .json, .plainText], allowsMultipleSelection: true) { result in
+            .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                 do {
                     let urls = try result.get()
                     for url in urls {
@@ -399,7 +406,7 @@ struct SettingsView: View {
                     Panel {
                         Label("版本", systemImage: "info.circle.fill")
                             .font(.headline)
-                        Text("Swift Native Preview 0.1.0")
+                        Text("Swift Native Preview 0.2.0")
                             .font(.subheadline)
                         Text("仅参考 OpenMinis 的 CoreDevice Toolkit 协议思路；不使用 Python、Node.js 或内嵌 Web UI。")
                             .font(.subheadline).foregroundStyle(.secondary)
