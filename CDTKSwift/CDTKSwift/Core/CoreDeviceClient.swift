@@ -118,7 +118,7 @@ struct CoreDeviceClient {
         sec_protocol_options_set_peer_authentication_required(tls.securityProtocolOptions, false)
         let keyData = secretBytes.withUnsafeBytes { DispatchData(bytes: $0) }
         let identityData = Data().withUnsafeBytes { DispatchData(bytes: $0) }
-        sec_protocol_options_add_pre_shared_key(tls.securityProtocolOptions, keyData, identityData)
+        sec_protocol_options_add_pre_shared_key(tls.securityProtocolOptions, keyData as __DispatchData, identityData as __DispatchData)
 
         let tunnel = SocketChannel(host: host, port: UInt16(port), tls: tls)
         defer { tunnel.close() }
