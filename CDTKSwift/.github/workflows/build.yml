@@ -1,0 +1,33 @@
+name: Build iOS IPA
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Verify Swift wire codec
+        run: |
+          swiftc -o /tmp/cdtk-wire-tests CDTKSwift/Core/WireCodec.swift Tests/WireCodecSmoke.swift
+          /tmp/cdtk-wire-tests
+      - name: Build for iPhone
+        run: |
+          xcodebuild -project CDTKSwift.xcodeproj -scheme CDTKSwift -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$PWD/build" CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/CDTKSwift.app Payload/
+          zip -qr CDTKSwift-unsigned.ipa Payload
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: CDTKSwift-unsigned-ipa
+          path: CDTKSwift-unsigned.ipa

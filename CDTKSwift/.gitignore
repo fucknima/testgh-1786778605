@@ -1,0 +1,8 @@
+# Generated project and archives
+CDTKSwift.xcodeproj/
+build/
+DerivedData/
+*.xcuserstate
+*.ipa
+Payload/
+.DS_Store
