@@ -114,7 +114,7 @@ enum ArtifactInspector {
                          ArtifactField(title: "终止原因", value: report.termination)],
                 note: "离线解析，完整调用栈请使用「崩溃」页面。")
         }
-        throw CDTKError.protocolMismatch("暂不支持 \.\(ext) 文件。支持 ipa、plist、json、mobileconfig、mobileprovision、ips。")
+        throw CDTKError.protocolMismatch("暂不支持 .\(ext) 文件。支持 ipa、plist、json、mobileconfig、mobileprovision、ips。")
     }
 
     private static func extractEmbeddedXML(_ data: Data) -> Data? {
