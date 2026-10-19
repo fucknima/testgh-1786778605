@@ -273,29 +273,33 @@ struct LocalArtifactToolsView: View {
         .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle("文件检查")
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $showPicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            do {
-                let urls = try result.get()
-                for url in urls {
-                    let scoped = url.startAccessingSecurityScopedResource()
-                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                    let coordinator = NSFileCoordinator(filePresenter: nil)
-                    var coordinatorError: NSError?
-                    var bytes: Data?
-                    var readError: Error?
-                    coordinator.coordinate(readingItemAt: url, options: [], error: &coordinatorError) { safeURL in
-                        do { bytes = try Data(contentsOf: safeURL, options: .mappedIfSafe) }
-                        catch { readError = error }
+        .sheet(isPresented: $showPicker) {
+            NativeDocumentPicker(multiple: true, didPick: { urls in
+                do {
+                    for url in urls {
+                        let scoped = url.startAccessingSecurityScopedResource()
+                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                        let coordinator = NSFileCoordinator(filePresenter: nil)
+                        var coordinatorError: NSError?
+                        var bytes: Data?
+                        var readError: Error?
+                        coordinator.coordinate(readingItemAt: url, options: [], error: &coordinatorError) { safeURL in
+                            do { bytes = try Data(contentsOf: safeURL, options: .mappedIfSafe) }
+                            catch { readError = error }
+                        }
+                        if let coordinatorError { throw coordinatorError }
+                        if let readError { throw readError }
+                        guard let bytes, bytes.count <= 300_000_000 else {
+                            throw CDTKError.protocolMismatch("无法读取文件或文件超过 300 MB")
+                        }
+                        reports.insert(try ArtifactInspector.inspect(bytes, name: url.lastPathComponent), at: 0)
                     }
-                    if let coordinatorError { throw coordinatorError }
-                    if let readError { throw readError }
-                    guard let bytes, bytes.count <= 300_000_000 else {
-                        throw CDTKError.protocolMismatch("无法读取文件或文件超过 300 MB")
-                    }
-                    reports.insert(try ArtifactInspector.inspect(bytes, name: url.lastPathComponent), at: 0)
-                }
-                errorText = nil
-            } catch { errorText = error.localizedDescription }
+                    errorText = nil
+                } catch { errorText = error.localizedDescription }
+                showPicker = false
+            }, didCancel: {
+                showPicker = false
+            })
         }
     }
 }

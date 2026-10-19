@@ -386,18 +386,22 @@ struct CrashView: View {
             }
             .background(Theme.canvas)
             .toolbar(.hidden, for: .navigationBar)
-            .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-                do {
-                    let urls = try result.get()
-                    for url in urls {
-                        let scoped = url.startAccessingSecurityScopedResource()
-                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                        let data = try Data(contentsOf: url)
-                        guard data.count <= 40_000_000 else { throw CDTKError.protocolMismatch("日志文件超过 40 MB") }
-                        reports.insert(CrashInspector.parse(data, fileName: url.lastPathComponent), at: 0)
-                    }
-                    importError = nil
-                } catch { importError = error.localizedDescription }
+            .sheet(isPresented: $isImporterPresented) {
+                NativeDocumentPicker(multiple: true, didPick: { urls in
+                    do {
+                        for url in urls {
+                            let scoped = url.startAccessingSecurityScopedResource()
+                            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                            let data = try Data(contentsOf: url)
+                            guard data.count <= 40_000_000 else { throw CDTKError.protocolMismatch("日志文件超过 40 MB") }
+                            reports.insert(CrashInspector.parse(data, fileName: url.lastPathComponent), at: 0)
+                        }
+                        importError = nil
+                    } catch { importError = error.localizedDescription }
+                    isImporterPresented = false
+                }, didCancel: {
+                    isImporterPresented = false
+                })
             }
         }
     }

@@ -2,20 +2,22 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// UIKit file picker in copy mode, avoiding ambiguous public.item filtering.
-/// Explicit property-list UTTypes keep .plist selectable in Files providers.
-struct PairingDocumentPicker: UIViewControllerRepresentable {
-    let didPick: (URL) -> Void
+/// Copy-mode picker for arbitrary file providers (including Files extensions).
+/// Explicit data and property-list UTTypes prevent silent selection failures
+/// caused by filtering on the overly generic public.item type.
+struct NativeDocumentPicker: UIViewControllerRepresentable {
+    let multiple: Bool
+    let didPick: ([URL]) -> Void
     let didCancel: () -> Void
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let types: [UTType] = [
-            .propertyList, .xmlPropertyList, .binaryPropertyList,
-            .json, .data, .plainText
+        let supported: [UTType] = [
+            .data, .content, .propertyList, .xmlPropertyList,
+            .binaryPropertyList, .json, .plainText
         ]
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: supported, asCopy: true)
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
+        picker.allowsMultipleSelection = multiple
         picker.shouldShowFileExtensions = true
         return picker
     }
@@ -27,25 +29,36 @@ struct PairingDocumentPicker: UIViewControllerRepresentable {
     }
 
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let didPick: (URL) -> Void
-        let didCancel: () -> Void
+        private let didPick: ([URL]) -> Void
+        private let didCancel: () -> Void
 
-        init(didPick: @escaping (URL) -> Void, didCancel: @escaping () -> Void) {
+        init(didPick: @escaping ([URL]) -> Void, didCancel: @escaping () -> Void) {
             self.didPick = didPick
             self.didCancel = didCancel
         }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let selected = urls.first else {
+            if urls.isEmpty {
                 didCancel()
-                return
+            } else {
+                // Import immediately, while the copy supplied by Files is still accessible.
+                didPick(urls)
             }
-            // Import synchronously while the temporary copy remains accessible.
-            didPick(selected)
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             didCancel()
         }
+    }
+}
+
+struct PairingDocumentPicker: View {
+    let didPick: (URL) -> Void
+    let didCancel: () -> Void
+
+    var body: some View {
+        NativeDocumentPicker(multiple: false, didPick: { urls in
+            if let first = urls.first { didPick(first) } else { didCancel() }
+        }, didCancel: didCancel)
     }
 }

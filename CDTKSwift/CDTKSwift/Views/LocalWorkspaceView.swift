@@ -59,20 +59,23 @@ struct LocalWorkspaceView: View {
         .navigationTitle("本地文件")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: reload)
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            do {
-                let files = try result.get()
-                guard !files.isEmpty else {
-                    errorText = "文件选择器没有返回文件，请重试。"
-                    return
+        .sheet(isPresented: $showImporter) {
+            NativeDocumentPicker(multiple: true, didPick: { files in
+                do {
+                    guard !files.isEmpty else {
+                        throw CDTKError.protocolMismatch("文件选择器未返回文件")
+                    }
+                    for url in files { try copySafely(url) }
+                    errorText = nil
+                    reload()
+                } catch {
+                    errorText = error.localizedDescription
+                    reload()
                 }
-                for url in files { try copySafely(url) }
-                errorText = nil
-                reload()
-            } catch {
-                errorText = error.localizedDescription
-                reload()
-            }
+                showImporter = false
+            }, didCancel: {
+                showImporter = false
+            })
         }
         .confirmationDialog(
             "确认删除此 App 内的文件？",
