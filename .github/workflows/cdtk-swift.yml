@@ -71,6 +71,17 @@ jobs:
           set -o pipefail
           xcodebuild -project CDTKSwift.xcodeproj -scheme CDTKSwift -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$PWD/build" CODE_SIGNING_ALLOWED=NO build
 
+      - name: Verify picker document types in built app
+        working-directory: CDTKSwift
+        shell: bash
+        run: |
+          set -euo pipefail
+          plist="build/Build/Products/Release-iphoneos/CDTKSwift.app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDocumentTypes:0:LSItemContentTypes' "$plist"
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' "$plist" | grep -q 'LaunchScreen'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDocumentTypes:0:LSItemContentTypes:0' "$plist" | grep -q 'com.apple.property-list'
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" | grep -q '0.2.1'
+
       - name: Package unsigned IPA
         working-directory: CDTKSwift
         run: |
@@ -92,10 +103,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="cdtk-swift-v0.2.0-beta"
+          tag="cdtk-swift-v0.2.1-beta"
           ipa="CDTKSwift/CDTKSwift-unsigned.ipa"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$ipa" --clobber
           else
-            gh release create "$tag" "$ipa" --title "CDTK Swift 0.2.0 Beta (unsigned)" --prerelease --target feature/cdtk-swift-native --notes "原生 SwiftUI 0.2.0 Beta。新增全屏 LaunchScreen、增强配对 plist/JSON 文件导入、IPA 和 mobileconfig 离线分析、本地文件管理。未签名 IPA 需自行签名。远程系统服务的 RemoteXPC/用户态 IPv6 实现仍在开发，设备功能需要真机验证。"
+            gh release create "$tag" "$ipa" --title "CDTK Swift 0.2.1 Beta (unsigned)" --prerelease --target feature/cdtk-swift-native --notes "原生 SwiftUI 0.2.1 Beta。修复 .plist 在文件提供器中无法点选：统一使用 UIKit UIDocumentPicker 复制模式、指定 propertyList UTType，并允许从 iOS 文件 App 使用「打开方式」导入。未签名 IPA 需自行签名。远程系统服务的 RemoteXPC/用户态 IPv6 实现仍在开发，设备功能需要真机验证。"
           fi

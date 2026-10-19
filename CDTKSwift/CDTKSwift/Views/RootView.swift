@@ -461,7 +461,7 @@ struct SettingsView: View {
                     Panel {
                         Label("版本", systemImage: "info.circle.fill")
                             .font(.headline)
-                        Text("Swift Native Preview 0.2.0")
+                        Text("Swift Native Preview 0.2.1")
                             .font(.subheadline)
                         Text("仅参考 OpenMinis 的 CoreDevice Toolkit 协议思路；不使用 Python、Node.js 或内嵌 Web UI。")
                             .font(.subheadline).foregroundStyle(.secondary)
