@@ -85,3 +85,17 @@ jobs:
           path: CDTKSwift/CDTKSwift-unsigned.ipa
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="cdtk-swift-v0.1.0-preview"
+          ipa="CDTKSwift/CDTKSwift-unsigned.ipa"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$ipa" --clobber
+          else
+            gh release create "$tag" "$ipa" --title "CDTK Swift 0.1.0 Preview (unsigned)" --prerelease --target feature/cdtk-swift-native --notes "SwiftUI + CryptoKit + Network.framework 原生项目初版。此 IPA 未签名，需要用户自己的证书签名。仅实现本机状态、配对导入、握手探针及离线 .ips 解析；完整设备服务尚未实现，协议还需真机验证。"
+          fi
