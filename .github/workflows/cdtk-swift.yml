@@ -27,7 +27,11 @@ jobs:
           set -euo pipefail
           cat CDTKSwift/bootstrap/part*.txt | base64 -D > /tmp/cdtk-native-src.txz
           echo "7620df561a460d3613f50d5367c380d18c27a9068c7045d4281378cfe7936089  /tmp/cdtk-native-src.txz" | shasum -a 256 -c -
-          tar -xJf /tmp/cdtk-native-src.txz -C CDTKSwift
+          if [ ! -f CDTKSwift/CDTKSwift/Core/CoreDeviceClient.swift ]; then
+            tar -xJf /tmp/cdtk-native-src.txz -C CDTKSwift
+          else
+            echo 'Existing expanded Swift files preserved; bootstrap archive verified.'
+          fi
           test -f CDTKSwift/project.yml
           test -f CDTKSwift/CDTKSwift/Core/CoreDeviceClient.swift
 
