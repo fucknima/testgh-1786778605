@@ -276,6 +276,25 @@ struct ToolsetView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    NavigationLink {
+                        LocalWorkspaceView()
+                    } label: {
+                        Panel {
+                            HStack(spacing: 12) {
+                                Image(systemName: "folder.badge.gearshape")
+                                    .font(.title3).foregroundStyle(Theme.blue)
+                                    .frame(width: 40, height: 40)
+                                    .background(Theme.canvas, in: RoundedRectangle(cornerRadius: 12))
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("本地文件管理").font(.headline)
+                                    Text("导入、分享与删除本 App 沙盒中的文件").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
                     ForEach(features) { feature in
                         Panel {
                             HStack(spacing: 12) {
