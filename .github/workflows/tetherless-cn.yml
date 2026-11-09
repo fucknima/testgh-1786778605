@@ -1,0 +1,80 @@
+name: Tetherless 简体中文 IPA (Modern + Legacy)
+on:
+  push:
+    branches:
+      - tetherless-cn
+    paths:
+      - scripts/tetherless_cn.py
+      - .github/workflows/tetherless-cn.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-chinese-ipa:
+    name: 汉化并检查 IPA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 获取汉化脚本
+        uses: actions/checkout@v4
+
+      - name: 下载安装原版 IPA 并验证 SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p in out
+          curl --fail --location --retry 5 --retry-delay 2 \
+            'https://github.com/pwnapplehat/TetherlessiOS/releases/download/v1.1.0/Tetherless-1.1.0-Modern.ipa' \
+            -o in/Tetherless-1.1.0-Modern.ipa
+          curl --fail --location --retry 5 --retry-delay 2 \
+            'https://github.com/pwnapplehat/TetherlessiOS/releases/download/v1.1.0/Tetherless-1.1.0-Legacy.ipa' \
+            -o in/Tetherless-1.1.0-Legacy.ipa
+          echo '08a3c88e99591ed062597c7b7019321a6f88d8154d9b90bdc8682ffb4e7492d8  in/Tetherless-1.1.0-Modern.ipa' | sha256sum --check --status
+          echo '5325f5a041b646b2a9afd08c95d86e61895335907c9c25ccda4694dfe2038982  in/Tetherless-1.1.0-Legacy.ipa' | sha256sum --check --status
+
+      - name: 加入简体中文语言资源 (不修改可执行代码)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/tetherless_cn.py
+          python3 scripts/tetherless_cn.py in/Tetherless-1.1.0-Modern.ipa out/Tetherless-1.1.0-Modern-CN.ipa \
+            --sha256 08a3c88e99591ed062597c7b7019321a6f88d8154d9b90bdc8682ffb4e7492d8
+          python3 scripts/tetherless_cn.py in/Tetherless-1.1.0-Legacy.ipa out/Tetherless-1.1.0-Legacy-CN.ipa \
+            --sha256 5325f5a041b646b2a9afd08c95d86e61895335907c9c25ccda4694dfe2038982
+          python3 - <<'PY'
+          import plistlib, zipfile, pathlib
+          for p in pathlib.Path('out').glob('*.ipa'):
+              with zipfile.ZipFile(p) as z:
+                  assert z.testzip() is None
+                  path = next(n for n in z.namelist() if n.startswith('Payload/') and n.count('/')==2 and n.endswith('/Info.plist'))
+                  info = plistlib.loads(z.read(path))
+                  root=path.rsplit('/', 1)[0]+'/'
+                  assert 'zh-Hans' in info['CFBundleLocalizations']
+                  assert root+'zh-Hans.lproj/Localizable.strings' in z.namelist()
+                  print('验证通过',p,info['CFBundleIdentifier'],info.get('CFBundleShortVersionString'))
+          PY
+
+      - name: 上传构建产物 (保留 90 天)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tetherless-1.1.0-CN
+          path: out/*
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: 发布中文 IPA 到 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='tetherless-cn-v1.1.0'
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target tetherless-cn \
+              --title 'Tetherless 1.1.0 简体中文资源版' \
+              --notes '基于作者官方 v1.1.0 IPA，仅添加简体中文资源和本地化配置，未更改可执行代码。请自行重签名安装。注意：未公开应用源码，无法确认所有界面都支持 Localizable.strings，部分硬编码英文可能保留。'
+          fi
+          gh release upload "$tag" out/*.ipa out/*.report.txt --clobber
+          gh release view "$tag" --json url,assets --jq '{url,assets:[.assets[].name]}'
