@@ -93,7 +93,7 @@ def package_layout(package_path: Path) -> str:
         chunks.extend("resource:" + item["path"] for item in sorted(t.get("resources") or [], key=lambda item: item["path"]))
         chunks.extend("target-dependency:" + value for value in sorted(field(t, "targetDependencies", "target_dependencies") or []))
         chunks.extend("product-dependency:" + value for value in sorted(field(t, "productDependencies", "product_dependencies") or []))
-    return hashlib.sha256("\\0".join(chunks).encode("utf-8")).hexdigest()
+    return hashlib.sha256("\0".join(chunks).encode("utf-8")).hexdigest()
 
 project = Path.cwd()
 graph = command_json(["swift", "package", "--package-path", str(project), "show-dependencies", "--format", "json"])
@@ -112,8 +112,7 @@ else:
     segments = [identity + ":" + package_layout(packages[identity]) for identity in sorted(packages)]
     resolved_hash = hashlib.sha256((project / "Package.resolved").read_bytes()).hexdigest()
     segments.append("resolved:" + resolved_hash)
-    graph_hash = hashlib.sha256("\\0".join(segments).encode("utf-8")).hexdigest()
-marker = root.parents[2] / ".stupid-app-package-layout"
+    graph_hash = hashlib.sha256("\0".join(segments).encode("utf-8")).hexdigest()
 # root: <scratch>/checkouts/stupid-chatkit/Sources/StupidChatKit
 # parents[0]=Sources, [1]=stupid-chatkit, [2]=checkouts => need parents[3]=scratch
 marker = root.parents[3] / ".stupid-app-package-layout"
