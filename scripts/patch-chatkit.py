@@ -5,6 +5,7 @@ Run only against the dependency's temporary SwiftPM checkout, never against
 the user's source files. These are expression-only refactors, preserving output.
 """
 from pathlib import Path
+import stat
 
 root = Path(".build/stupid-app/scratch/arm64-apple-ios/StupidAgent/checkouts/stupid-chatkit/Sources/StupidChatKit")
 
@@ -18,6 +19,7 @@ def patch(relative_path: str, old: str, new: str) -> None:
         return
     if source.count(old) != 1:
         raise SystemExit(f"Expected expression not found exactly once in {relative_path}")
+    path.chmod(path.stat().st_mode | stat.S_IWUSR)
     path.write_text(source.replace(old, new, 1), encoding="utf-8")
     print(f"Patched {relative_path}")
 
