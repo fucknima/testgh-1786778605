@@ -16,7 +16,7 @@ APP = {
         "Chats": "对话",
         "Chat Not Found": "找不到对话",
         "Settings": "设置",
-        r"Delete \u{201C}\(pendingDelete?.title ?? "")\u{201D}?": r"确定删除“\(pendingDelete?.title ?? "")”吗？",
+        r'Delete \u{201C}\(pendingDelete?.title ?? "")\u{201D}?': r'确定删除“\(pendingDelete?.title ?? "")”吗？',
         "Cancel": "取消",
         "Delete Chat": "删除对话",
         "This deletes the conversation. Files the agent made stay in your workspace.": "删除后无法恢复聊天记录；智能体创建的文件会保留在工作区。",
@@ -122,7 +122,7 @@ APP = {
         "Run JavaScript": "运行 JavaScript",
         "The response failed.": "模型响应失败。",
         "Stopped": "已停止",
-        " in ": "（位置：",
+        " in ": "，位置：",
     },
     "Sources/StupidAgentCore/ModelSettings.swift": {
         "Custom": "自定义",
@@ -227,16 +227,23 @@ def localize_app() -> None:
 
     title = ROOT / "Sources/StupidAgentCore/TitleGenerator.swift"
     source = title.read_text(encoding="utf-8")
-    source = source.replace('    You name chat conversations. Reply with only a short title, at most six words, for the conversation that starts \\',
-                            '    请根据用户第一条消息生成简短的简体中文对话标题（不超过 12 个汉字）。只返回标题，不要引号、Markdown 或结尾标点。\\')
+    opening = '    static let instructions = """'
+    start = source.index(opening)
+    if start < 0:
+        raise RuntimeError("对话标题提示词结构未找到")
+    finish = source.index('    """', start + len(opening))
+    source = source[:start] + '''    static let instructions = """
+    请根据用户第一条消息生成不超过 12 个汉字的简体中文对话标题。
+    只返回标题，不要引号、Markdown 或结尾标点。
+    """''' + source[finish + len('    """'):]
     source = source.replace('["Title:", "title:", "#"]', '["Title:", "title:", "标题：", "标题:", "#"]')
     title.write_text(source, encoding="utf-8")
 
     welcome = ROOT / "Sources/StupidAgent/StupidAgent.swift"
     source = welcome.read_text(encoding="utf-8")
     source = source.replace("# Welcome", "# 欢迎使用")
-    source = source.replace("This folder is the agent's workspace. The agent can read, create and edit files here, and you can see \\",
-                            "此文件夹是智能体的工作区。智能体可在这里读取、新建和修改文件，你可以在“文件”App 中查看 \\")
+    source = source.replace("This folder is the agent's workspace. The agent can read, create and edit files here, and you can see",
+                            "此文件夹是智能体的工作区，智能体可以在这里读取、新建和修改文件，你可以在“文件”App 中查看")
     source = source.replace("them in the Files app under On My iPhone → stupid agent.",
                             "这些文件，路径为“我的 iPhone”→ stupid agent。")
     welcome.write_text(source, encoding="utf-8")
@@ -246,9 +253,9 @@ def localize_app() -> None:
     source = source.replace("<string>stupid agent</string>", "<string>随身智能体</string>")
     source = source.replace("Connect to a model running on a computer on your network, such as Ollama or LM Studio.",
                             "连接同一局域网内电脑运行的模型，例如 Ollama 或 LM Studio。")
-    source = source.replace("<key>CFBundleDisplayName</key>", "<key>CFBundleDevelopmentRegion</key><string>zh_CN</string>\\n\\t<key>CFBundleLocalizations</key><array><string>zh-Hans</string></array>\\n\\t<key>CFBundleDisplayName</key>")
+    source = source.replace("<key>CFBundleDisplayName</key>", "<key>CFBundleDevelopmentRegion</key><string>zh_CN</string>\n\t<key>CFBundleLocalizations</key><array><string>zh-Hans</string></array>\n\t<key>CFBundleDisplayName</key>")
     source = source.replace("<key>NSLocalNetworkUsageDescription</key>",
-                            "<key>NSMicrophoneUsageDescription</key><string>用于录制并发送语音消息。</string>\\n\\t<key>NSPhotoLibraryAddUsageDescription</key><string>将聊天中的图片保存到照片图库。</string>\\n\\t<key>NSLocalNetworkUsageDescription</key>")
+                            "<key>NSMicrophoneUsageDescription</key><string>用于录制并发送语音消息。</string>\n\t<key>NSPhotoLibraryAddUsageDescription</key><string>将聊天中的图片保存到照片图库。</string>\n\t<key>NSLocalNetworkUsageDescription</key>")
     info.write_text(source, encoding="utf-8")
 
     # 修改了工具名称后，更新单元测试的预期值，确保汉化不掩盖回归。
@@ -259,6 +266,7 @@ def localize_app() -> None:
         '"List"': '"列出"',
         '"Search the web for swift 6"': '"网页搜索 swift 6"',
         '"Run JavaScript"': '"运行 JavaScript"',
+        '"todo in notes"': '"todo，位置：notes"',
     }.items():
         source = source.replace(old, new)
     tests.write_text(source, encoding="utf-8")
