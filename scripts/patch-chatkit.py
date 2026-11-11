@@ -98,6 +98,10 @@ patch(
                     }'''
 )
 
+# 本地化只修改此构建的临时依赖，保留上游仓库版本和业务逻辑。
+from zh_kit import localize_chatkit
+localize_chatkit(root)
+
 # stupid-app 0.0.27 writes its package-layout marker *only after* a successful
 # build. If the first build fails, its second invocation deletes the entire
 # scratch directory (including the modified package checkout). Reconstruct the
