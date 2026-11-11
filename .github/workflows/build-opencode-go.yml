@@ -19,6 +19,8 @@ jobs:
           swift --version
           xcodebuild -version
           test "$(uname -m)" = "arm64"
+      - name: Localize app to Simplified Chinese
+        run: python3 scripts/zh_app.py
       - name: Swift core tests
         run: swift test
       - name: Install stupid-app
