@@ -22,9 +22,14 @@ struct SettingsView: View {
             Form {
                 Section {
                     Picker("Provider", selection: Binding(get: { settings.preset }, set: choose)) {
-                        ForEach(ProviderPreset.allCases) { preset in
-                            Text(preset.name).tag(preset)
-                        }
+                        Text("OpenAI").tag(ProviderPreset.openAI)
+                        Text("OpenCode Go").tag(ProviderPreset.openCodeGo)
+                        Text("OpenRouter").tag(ProviderPreset.openRouter)
+                        Text("Groq").tag(ProviderPreset.groq)
+                        Text("DeepSeek").tag(ProviderPreset.deepSeek)
+                        Text("Ollama").tag(ProviderPreset.ollama)
+                        Text("LM Studio").tag(ProviderPreset.lmStudio)
+                        Text("Custom").tag(ProviderPreset.custom)
                     }
                     TextField("Base URL", text: $settings.baseURL)
                         .keyboardType(.URL)
