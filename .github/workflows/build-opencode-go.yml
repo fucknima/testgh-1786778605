@@ -28,10 +28,17 @@ jobs:
             https://github.com/stephancill/stupid-app-cli/releases/latest/download/stupid-app-macos-arm64
           chmod +x "$HOME/.local/bin/stupid-app"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Build device app
+      - name: Build device app (repair upstream Swift type-checking issue)
         run: |
           "$HOME/.local/bin/stupid-app" --version
-          "$HOME/.local/bin/stupid-app" build --configuration debug
+          if "$HOME/.local/bin/stupid-app" build --configuration debug > "$RUNNER_TEMP/initial-ios-build.log" 2>&1; then
+            cat "$RUNNER_TEMP/initial-ios-build.log"
+          else
+            tail -n 60 "$RUNNER_TEMP/initial-ios-build.log"
+            grep -q 'unable to type-check this expression' "$RUNNER_TEMP/initial-ios-build.log"
+            python3 scripts/patch-chatkit.py
+            "$HOME/.local/bin/stupid-app" build --configuration debug
+          fi
           test -f .build/arm64-apple-ios/debug/StupidAgent.app/StupidAgent
       - name: Assemble unsigned IPA
         run: |
