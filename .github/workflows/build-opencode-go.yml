@@ -31,12 +31,12 @@ jobs:
       - name: Build device app
         run: |
           "$HOME/.local/bin/stupid-app" --version
-          "$HOME/.local/bin/stupid-app" build --configuration release
-          test -f .build/arm64-apple-ios/release/StupidAgent.app/StupidAgent
+          "$HOME/.local/bin/stupid-app" build --configuration debug
+          test -f .build/arm64-apple-ios/debug/StupidAgent.app/StupidAgent
       - name: Assemble unsigned IPA
         run: |
           mkdir -p dist/Payload
-          ditto .build/arm64-apple-ios/release/StupidAgent.app dist/Payload/StupidAgent.app
+          ditto .build/arm64-apple-ios/debug/StupidAgent.app dist/Payload/StupidAgent.app
           cd dist
           /usr/bin/zip -qry StupidAgent-OpenCodeGo-unsigned.ipa Payload
           shasum -a 256 StupidAgent-OpenCodeGo-unsigned.ipa > SHA256.txt
