@@ -1,0 +1,52 @@
+name: Build Stupid Agent OpenCode Go
+on:
+  push:
+    branches:
+      - stupid-agent-go
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select recent Xcode
+        run: |
+          XCODE_26=$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort | tail -n 1)
+          if [ -n "$XCODE_26" ]; then sudo xcode-select -s "$XCODE_26/Contents/Developer"; fi
+          swift --version
+          xcodebuild -version
+          test "$(uname -m)" = "arm64"
+      - name: Swift core tests
+        run: swift test
+      - name: Install stupid-app
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fL --retry 3 --output "$HOME/.local/bin/stupid-app" \
+            https://github.com/stephancill/stupid-app-cli/releases/latest/download/stupid-app-macos-arm64
+          chmod +x "$HOME/.local/bin/stupid-app"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build device app
+        run: |
+          "$HOME/.local/bin/stupid-app" --version
+          "$HOME/.local/bin/stupid-app" build --configuration release
+          test -f .build/arm64-apple-ios/release/StupidAgent.app/StupidAgent
+      - name: Assemble unsigned IPA
+        run: |
+          mkdir -p dist/Payload
+          ditto .build/arm64-apple-ios/release/StupidAgent.app dist/Payload/StupidAgent.app
+          cd dist
+          /usr/bin/zip -qry StupidAgent-OpenCodeGo-unsigned.ipa Payload
+          shasum -a 256 StupidAgent-OpenCodeGo-unsigned.ipa > SHA256.txt
+          ls -lh StupidAgent-OpenCodeGo-unsigned.ipa
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: StupidAgent-OpenCodeGo-unsigned
+          path: |
+            dist/StupidAgent-OpenCodeGo-unsigned.ipa
+            dist/SHA256.txt
+          if-no-files-found: error
+          retention-days: 30
