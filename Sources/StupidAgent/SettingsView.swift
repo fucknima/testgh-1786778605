@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var settings = ModelSettings()
+    @State private var selectedPreset: ProviderPreset = .openRouter
     @State private var apiKey = ""
     @State private var availableModels: [String] = []
     @State private var loadingModels = false
@@ -21,7 +22,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Provider", selection: Binding(get: { settings.preset }, set: choose)) {
+                    Picker("Provider", selection: $selectedPreset) {
                         Text("OpenAI").tag(ProviderPreset.openAI)
                         Text("OpenCode Go").tag(ProviderPreset.openCodeGo)
                         Text("OpenRouter").tag(ProviderPreset.openRouter)
@@ -31,6 +32,7 @@ struct SettingsView: View {
                         Text("LM Studio").tag(ProviderPreset.lmStudio)
                         Text("Custom").tag(ProviderPreset.custom)
                     }
+                    .onChange(of: selectedPreset) { _, preset in choose(preset) }
                     TextField("Base URL", text: $settings.baseURL)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -130,6 +132,7 @@ struct SettingsView: View {
                 guard !loaded else { return }
                 loaded = true
                 settings = model.settings
+                selectedPreset = settings.preset
                 apiKey = model.apiKey ?? ""
             }
         }
