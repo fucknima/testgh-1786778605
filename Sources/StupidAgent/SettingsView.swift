@@ -9,7 +9,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var settings = ModelSettings()
-    @State private var selectedPreset: ProviderPreset = .openRouter
+    @State private var selectedPresetID = ProviderPreset.openRouter.rawValue
     @State private var apiKey = ""
     @State private var availableModels: [String] = []
     @State private var loadingModels = false
@@ -22,17 +22,19 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Provider", selection: $selectedPreset) {
-                        Text("OpenAI").tag(ProviderPreset.openAI)
-                        Text("OpenCode Go").tag(ProviderPreset.openCodeGo)
-                        Text("OpenRouter").tag(ProviderPreset.openRouter)
-                        Text("Groq").tag(ProviderPreset.groq)
-                        Text("DeepSeek").tag(ProviderPreset.deepSeek)
-                        Text("Ollama").tag(ProviderPreset.ollama)
-                        Text("LM Studio").tag(ProviderPreset.lmStudio)
-                        Text("Custom").tag(ProviderPreset.custom)
+                    Picker("Provider", selection: $selectedPresetID) {
+                        Text("OpenAI").tag(ProviderPreset.openAI.rawValue)
+                        Text("OpenCode Go").tag(ProviderPreset.openCodeGo.rawValue)
+                        Text("OpenRouter").tag(ProviderPreset.openRouter.rawValue)
+                        Text("Groq").tag(ProviderPreset.groq.rawValue)
+                        Text("DeepSeek").tag(ProviderPreset.deepSeek.rawValue)
+                        Text("Ollama").tag(ProviderPreset.ollama.rawValue)
+                        Text("LM Studio").tag(ProviderPreset.lmStudio.rawValue)
+                        Text("Custom").tag(ProviderPreset.custom.rawValue)
                     }
-                    .onChange(of: selectedPreset) { _, preset in choose(preset) }
+                    .onChange(of: selectedPresetID) { _, rawValue in
+                        if let preset = ProviderPreset(rawValue: rawValue) { choose(preset) }
+                    }
                     TextField("Base URL", text: $settings.baseURL)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -132,7 +134,7 @@ struct SettingsView: View {
                 guard !loaded else { return }
                 loaded = true
                 settings = model.settings
-                selectedPreset = settings.preset
+                selectedPresetID = settings.preset.rawValue
                 apiKey = model.apiKey ?? ""
             }
         }
