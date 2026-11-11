@@ -1,0 +1,11 @@
+version: 1
+product: StupidAgent
+bundleID: net.stupidtech.StupidAgent
+deploymentTarget: "18.0"
+infoPath: Info.plist
+entitlementsPath: App.entitlements
+# deviceFamily: iphone
+capabilities:
+  - entitlementKey: com.apple.security.application-groups
+    type: APP_GROUPS
+iconPath: Resources/AppIcon.png

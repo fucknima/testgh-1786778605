@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+.release/
+.MacInstall/
+DerivedData/
+.DS_Store
+.env.local
