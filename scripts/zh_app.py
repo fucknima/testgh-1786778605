@@ -267,6 +267,8 @@ def localize_app() -> None:
         '"Search the web for swift 6"': '"网页搜索 swift 6"',
         '"Run JavaScript"': '"运行 JavaScript"',
         '"todo in notes"': '"todo，位置：notes"',
+        '"Create out.txt?"': '"确定创建 out.txt？"',
+        '"Truncated to 1 row"': '"结果已截断至 1 行"',
     }.items():
         source = source.replace(old, new)
     tests.write_text(source, encoding="utf-8")
