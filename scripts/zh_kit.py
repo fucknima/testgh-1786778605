@@ -30,6 +30,9 @@ KIT = {
     },
     "Models/ChatViewModel.swift": {
         r"last seen \(Self.lastSeenTime(date))": r"上次在线：\(Self.lastSeenTime(date))",
+        "online": "在线",
+        "Sticker": "贴纸",
+        "You": "我",
         "last seen recently": "最近在线",
         "last seen within a week": "一周内在线",
         "last seen within a month": "一个月内在线",
