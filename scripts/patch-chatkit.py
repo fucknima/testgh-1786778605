@@ -68,6 +68,36 @@ patch(
         }'''
 )
 
+patch(
+    "Views/ChatUIKitView.swift",
+    '''import UIKit
+import UniformTypeIdentifiers
+
+/// UIKit chat shared by every network''',
+    '''import UIKit
+import UniformTypeIdentifiers
+
+/// NSItemProvider supports background loading, though it has no Sendable annotation.
+private struct SendableItemProvider: @unchecked Sendable {
+    let provider: NSItemProvider
+}
+
+/// UIKit chat shared by every network'''
+)
+patch(
+    "Views/ChatUIKitView.swift",
+    '''                    // NSItemProvider loads on its own queues; it's only handed over here.
+                    nonisolated(unsafe) let provider = provider
+                    group.addTask { await (index, Self.imageAttachment(from: provider)) }''',
+    '''                    // Loading is concurrent. The explicit unchecked wrapper crosses the
+                    // task-group boundary without leaking MainActor state into child tasks.
+                    let boxed = SendableItemProvider(provider: provider)
+                    group.addTask { [boxed] in
+                        let attachment = await Self.imageAttachment(from: boxed.provider)
+                        return (index, attachment)
+                    }'''
+)
+
 # stupid-app 0.0.27 writes its package-layout marker *only after* a successful
 # build. If the first build fails, its second invocation deletes the entire
 # scratch directory (including the modified package checkout). Reconstruct the
